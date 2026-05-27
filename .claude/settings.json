@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:opencode.ai)",
+      "WebFetch(domain:yandex.ru)",
+      "Read(//usr/local/go/**)",
+      "Read(//home/ivan/go/**)",
+      "Read(//usr/**)",
+      "Read(//home/ivan/.opencode/bin/**)",
+      "Bash(/home/ivan/.opencode/bin/go version *)",
+      "Read(//home/ivan/**)",
+      "Bash(mkdir -p /home/ivan/.local/go)",
+      "Bash(tar -C /home/ivan/.local -xzf /tmp/go.tar.gz)",
+      "Bash(/home/ivan/.local/go/bin/go version *)"
+    ]
+  }
+}

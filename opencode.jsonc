@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "yandex-metrika": {
+      "type": "local",
+      // Absolute path to the built binary.
+      // Run `make build` first, then replace with absolute path.
+      "command": ["./bin/mcp-server"],
+      "enabled": true,
+      "env": {
+        // You can hardcode the token here or reference a shell variable.
+        // For production, use an absolute path and keep token in env:
+        // "ACCESS_TOKEN": "y0_XXXXX"
+        "ACCESS_TOKEN": ""
+      }
+    }
+  }
+}
