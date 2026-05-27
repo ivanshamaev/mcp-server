@@ -14,8 +14,12 @@ import (
 	"github.com/ivshamaev/yametrika-mcp/internal/metrika"
 )
 
-// version is set at build time via -ldflags.
-var version = "dev"
+// Build-time variables injected by goreleaser via -ldflags.
+var (
+	version = "dev"     // -X main.version={{ .Version }}
+	commit  = "none"    // -X main.commit={{ .ShortCommit }}
+	date    = "unknown" // -X main.date={{ .Date }}
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -55,6 +59,7 @@ func run() error {
 
 	// ── MCP transport + server ───────────────────────────────────────────────
 	transport := mcp.NewStdioTransport(os.Stdin, os.Stdout)
+	logger.Info("starting server", "version", version, "commit", commit, "date", date)
 	server := mcp.NewServer(transport, mc, logger, version)
 
 	// ── Graceful shutdown ────────────────────────────────────────────────────

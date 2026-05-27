@@ -7,29 +7,34 @@
 
 ### Версия протокола
 
-Поддерживаемая версия: **`2024-11-05`** (стабильная, поддерживается всеми клиентами).
+Поддерживаемая версия: **`2024-11-05`** (стабильная, поддерживается opencode, Claude Code, Claude Desktop).
 
 ## Транспорт: Stdio
 
 Для локального MCP-сервера используется **stdio транспорт**:
 
 ```
-opencode/Claude Code → [stdin] → MCP Server → [stdout] → opencode/Claude Code
-                                     ↓
-                                  [stderr] → логи
+opencode/Claude Code
+    │  stdin (JSON-RPC запросы, по одному на строку)
+    ▼
+MCP Server (./bin/mcp-server или yametrika-mcp)
+    │  stdout (JSON-RPC ответы, по одному на строку)
+    ▼
+opencode/Claude Code
+    │
+    ▼  stderr → логи (JSON, slog)
 ```
 
-**Формат фреймирования:** Каждое JSON-RPC сообщение — отдельная строка (`\n`-terminated).
-Клиент читает по строкам, сервер отвечает одной строкой на запрос.
+**Формат фреймирования:** каждое JSON-RPC сообщение — одна строка, завершённая `\n`.
+`json.Encoder.Encode()` добавляет `\n` автоматически.
+
+### Scanner buffer
+
+Буфер `bufio.Scanner` для stdin установлен в **4 MB** (не 1 MB — логи Metrika могут быть большими):
 
 ```go
-// Основной цикл чтения
-scanner := bufio.NewScanner(os.Stdin)
-scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB буфер
-for scanner.Scan() {
-    line := scanner.Bytes()
-    // обработка JSON-RPC запроса
-}
+const maxTokenSize = 4 * 1024 * 1024 // 4 MB
+scanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
 ```
 
 ## Жизненный цикл
@@ -37,9 +42,9 @@ for scanner.Scan() {
 ```
 Client                          Server
   │                               │
-  │── initialize ──────────────►  │  (1) Клиент инициирует соединение
-  │  ◄─────────────── result ───  │  (2) Сервер отвечает capabilities
-  │── notifications/initialized ► │  (3) Клиент сигнализирует готовность
+  │── initialize ──────────────►  │  (1) Инициация + согласование capabilities
+  │  ◄─────────────── result ───  │  (2) Сервер отвечает своими capabilities
+  │── notifications/initialized ► │  (3) Клиент сигнализирует готовность (без ответа)
   │                               │
   │── tools/list ───────────────► │  (4) Клиент запрашивает список tools
   │  ◄─────────────── result ───  │
@@ -47,18 +52,24 @@ Client                          Server
   │── tools/call ───────────────► │  (5) Клиент вызывает tool
   │  ◄─────────────── result ───  │
   │                               │
-  │── [EOF / SIGTERM] ──────────  │  (6) Завершение
+  │── ping ─────────────────────► │  (6) Keepalive (опционально)
+  │  ◄─────────────── result ───  │
+  │                               │
+  │── [EOF / SIGTERM] ──────────► │  (7) Завершение
 ```
+
+**Завершение:**
+- EOF в stdin → сервер завершает работу штатно
+- SIGTERM / SIGINT → graceful shutdown через `signal.NotifyContext`
 
 ## JSON-RPC 2.0 Типы
 
 ```go
-// Базовые типы JSON-RPC 2.0
 type Request struct {
-    JSONRPC string          `json:"jsonrpc"`           // всегда "2.0"
-    ID      *json.RawMessage `json:"id,omitempty"`    // null для notifications
-    Method  string          `json:"method"`
-    Params  json.RawMessage `json:"params,omitempty"`
+    JSONRPC string           `json:"jsonrpc"`          // всегда "2.0"
+    ID      *json.RawMessage `json:"id,omitempty"`     // nil = notification
+    Method  string           `json:"method"`
+    Params  json.RawMessage  `json:"params,omitempty"`
 }
 
 type Response struct {
@@ -68,32 +79,52 @@ type Response struct {
     Error   *RPCError        `json:"error,omitempty"`
 }
 
-type Notification struct {
-    JSONRPC string `json:"jsonrpc"` // всегда "2.0"
-    Method  string `json:"method"`
-    Params  any    `json:"params,omitempty"`
-}
-
 type RPCError struct {
     Code    int    `json:"code"`
     Message string `json:"message"`
     Data    any    `json:"data,omitempty"`
 }
 
-// Стандартные коды ошибок JSON-RPC
 const (
     CodeParseError     = -32700 // Invalid JSON
-    CodeInvalidRequest = -32600 // Not valid JSON-RPC
-    CodeMethodNotFound = -32601 // Method doesn't exist
-    CodeInvalidParams  = -32602 // Invalid method params
-    CodeInternalError  = -32603 // Internal server error
+    CodeInvalidRequest = -32600 // Not valid JSON-RPC 2.0
+    CodeMethodNotFound = -32601 // Unknown method
+    CodeInvalidParams  = -32602 // Bad params
+    CodeInternalError  = -32603 // Server error
 )
 ```
 
+### Notifications (без id)
+
+Уведомления от клиента **не требуют ответа**. Сервер их принимает и игнорирует (кроме известных):
+
+```go
+if req.ID == nil {
+    // notification — не отвечаем
+    handleNotification(req)
+    continue
+}
+```
+
+Известные notifications:
+- `notifications/initialized` — логируется как INFO
+
+## Поддерживаемые методы
+
+| Метод | Требует initialize? | Описание |
+|-------|:-----------------:|----------|
+| `initialize` | ❌ | Handshake, согласование capabilities |
+| `notifications/initialized` | ❌ | Notification от клиента (нет ответа) |
+| `tools/list` | ✅ | Список доступных tools |
+| `tools/call` | ✅ | Вызов tool |
+| `ping` | ❌ | Keepalive → `{}` |
+
+Любой другой метод → `{"code": -32601, "message": "method not found: <method>"}`.
+
 ## Метод: initialize
 
-**Запрос клиента:**
 ```json
+// Запрос
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -101,16 +132,11 @@ const (
   "params": {
     "protocolVersion": "2024-11-05",
     "capabilities": {},
-    "clientInfo": {
-      "name": "opencode",
-      "version": "0.1.0"
-    }
+    "clientInfo": { "name": "opencode", "version": "0.1.0" }
   }
 }
-```
 
-**Ответ сервера:**
-```json
+// Ответ
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -121,44 +147,21 @@ const (
     },
     "serverInfo": {
       "name": "yandex-metrika-mcp",
-      "version": "1.0.0"
+      "version": "1.2.0"
     }
   }
 }
 ```
 
-```go
-type InitializeParams struct {
-    ProtocolVersion string       `json:"protocolVersion"`
-    Capabilities    Capabilities `json:"capabilities"`
-    ClientInfo      ClientInfo   `json:"clientInfo"`
-}
-
-type InitializeResult struct {
-    ProtocolVersion string       `json:"protocolVersion"`
-    Capabilities    Capabilities `json:"capabilities"`
-    ServerInfo      ServerInfo   `json:"serverInfo"`
-}
-
-type Capabilities struct {
-    Tools     *ToolsCapability     `json:"tools,omitempty"`
-    Resources *ResourcesCapability `json:"resources,omitempty"`
-}
-
-type ToolsCapability struct {
-    ListChanged bool `json:"listChanged,omitempty"`
-}
-```
+Повторный `initialize` допустим (идемпотентен) — просто обновляет флаг и логирует.
 
 ## Метод: tools/list
 
-**Запрос:**
 ```json
-{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
-```
+// Запрос
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }
 
-**Ответ:**
-```json
+// Ответ
 {
   "jsonrpc": "2.0",
   "id": 2,
@@ -166,7 +169,7 @@ type ToolsCapability struct {
     "tools": [
       {
         "name": "metrika_get_counters",
-        "description": "Получить список всех счётчиков Yandex Metrika",
+        "description": "Получить список всех счётчиков Yandex Metrika аккаунта",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -178,31 +181,12 @@ type ToolsCapability struct {
 }
 ```
 
-```go
-type Tool struct {
-    Name        string     `json:"name"`
-    Description string     `json:"description"`
-    InputSchema InputSchema `json:"inputSchema"`
-}
-
-type InputSchema struct {
-    Type       string              `json:"type"`        // всегда "object"
-    Properties map[string]Property `json:"properties"`
-    Required   []string            `json:"required,omitempty"`
-}
-
-type Property struct {
-    Type        string   `json:"type"`
-    Description string   `json:"description"`
-    Enum        []string `json:"enum,omitempty"`
-    Default     any      `json:"default,omitempty"`
-}
-```
+Список tools статический (определяется при старте сервера, не меняется в runtime).
 
 ## Метод: tools/call
 
-**Запрос:**
 ```json
+// Запрос
 {
   "jsonrpc": "2.0",
   "id": 3,
@@ -210,306 +194,244 @@ type Property struct {
   "params": {
     "name": "metrika_get_report",
     "arguments": {
-      "counter_id": "12345678",
+      "counter_id": "96819956",
       "metrics": "ym:s:visits,ym:s:pageviews",
       "dimensions": "ym:s:date",
-      "date1": "2024-01-01",
-      "date2": "2024-01-31"
+      "date1": "7daysAgo",
+      "date2": "today"
     }
   }
 }
-```
 
-**Ответ (успех):**
-```json
+// Ответ (успех)
 {
   "jsonrpc": "2.0",
   "id": 3,
   "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "{ ... JSON данные от Metrika API ... }"
-      }
-    ],
+    "content": [{ "type": "text", "text": "{ ... prettified JSON ... }" }],
     "isError": false
   }
 }
-```
 
-**Ответ (ошибка в tool, не протокольная):**
-```json
+// Ответ (ошибка на уровне tool — API недоступен, неверный counter_id и т.д.)
 {
   "jsonrpc": "2.0",
   "id": 3,
   "result": {
-    "content": [
-      {
-        "type": "text",
-        "text": "Error: counter 12345678 not found (HTTP 404)"
-      }
-    ],
+    "content": [{ "type": "text", "text": "Ошибка получения отчёта: HTTP 404 ..." }],
     "isError": true
   }
 }
 ```
 
-> **Важно:** Ошибки выполнения tool (API ошибки, неверные параметры) возвращаются
-> через `result.isError: true`, а не через `error`. JSON-RPC `error` только для
-> протокольных ошибок (неверный метод, неверный JSON и т.д.)
-
-```go
-type ToolCallParams struct {
-    Name      string         `json:"name"`
-    Arguments map[string]any `json:"arguments"`
-}
-
-type ToolCallResult struct {
-    Content []ContentItem `json:"content"`
-    IsError bool          `json:"isError,omitempty"`
-}
-
-type ContentItem struct {
-    Type string `json:"type"` // "text" | "image" | "resource"
-    Text string `json:"text,omitempty"`
-}
-```
+> **Ключевое правило:** Ошибки выполнения tool (недоступный API, неверные параметры) → `result.isError: true`.
+> JSON-RPC `error` только для протокольных сбоев (неверный JSON, неизвестный метод).
 
 ## Реестр Tools: Yandex Metrika
 
 ### `metrika_get_counters`
-Получить список счётчиков пользователя.
-```json
-{ "properties": {}, "required": [] }
-```
-→ Вызов: `GET /management/v1/counters`
+Список всех счётчиков аккаунта.
+- Параметры: нет
+- API: `GET /management/v1/counters?per_page=1000`
 
 ---
 
 ### `metrika_get_counter`
-Информация о конкретном счётчике.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" }
-  },
-  "required": ["counter_id"]
-}
-```
-→ Вызов: `GET /management/v1/counter/{counter_id}`
+Подробная информация о счётчике.
+- Параметры: `counter_id` (string, required)
+- API: `GET /management/v1/counter/{counter_id}`
 
 ---
 
 ### `metrika_get_report`
-Получить статистический отчёт.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" },
-    "metrics":    { "type": "string", "description": "Метрики через запятую, напр. ym:s:visits,ym:s:pageviews" },
-    "dimensions": { "type": "string", "description": "Измерения через запятую, напр. ym:s:date" },
-    "date1":      { "type": "string", "description": "Начало периода YYYY-MM-DD (default: 7daysAgo)" },
-    "date2":      { "type": "string", "description": "Конец периода YYYY-MM-DD (default: today)" },
-    "sort":       { "type": "string", "description": "Поле сортировки" },
-    "limit":      { "type": "string", "description": "Лимит строк (default: 100)" },
-    "filters":    { "type": "string", "description": "Фильтры в формате Metrika" }
-  },
-  "required": ["counter_id", "metrics"]
-}
-```
-→ Вызов: `GET /stat/v1/data`
+Статистический отчёт (Reports API).
+- Параметры:
+
+| Параметр | Тип | Обязательный | Default | Описание |
+|----------|-----|:---:|---------|----------|
+| `counter_id` | string | ✅ | — | ID счётчика |
+| `metrics` | string | ✅ | — | Метрики через запятую: `ym:s:visits,ym:s:pageviews` |
+| `dimensions` | string | ❌ | — | Измерения: `ym:s:date,ym:s:sourceEngine` |
+| `date1` | string | ❌ | `7daysAgo` | Начало: `YYYY-MM-DD` или `7daysAgo`, `today` |
+| `date2` | string | ❌ | `today` | Конец периода |
+| `sort` | string | ❌ | — | Сортировка: `-ym:s:visits` |
+| `limit` | string | ❌ | `100` | Лимит строк (1–100000) |
+| `filters` | string | ❌ | — | Фильтры Metrika: `ym:s:regionCity=='Москва'` |
+| `group` | string | ❌ | — | Группировка: `day`, `week`, `month` |
+
+- API: `GET /stat/v1/data`
 
 ---
 
 ### `metrika_get_goals`
 Список целей счётчика.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" }
-  },
-  "required": ["counter_id"]
-}
-```
-→ Вызов: `GET /management/v1/counter/{counter_id}/goals`
+- Параметры: `counter_id` (string, required)
+- API: `GET /management/v1/counter/{counter_id}/goals`
 
 ---
 
 ### `metrika_get_segments`
 Список сегментов счётчика.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" }
-  },
-  "required": ["counter_id"]
-}
-```
-→ Вызов: `GET /management/v1/counter/{counter_id}/segments`
+- Параметры: `counter_id` (string, required)
+- API: `GET /management/v1/counter/{counter_id}/segments`
 
 ---
 
 ### `metrika_list_logs`
-Список запросов на выгрузку логов.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" }
-  },
-  "required": ["counter_id"]
-}
-```
-→ Вызов: `GET /logs/v1/counter/{counter_id}/logrequests`
+Список запросов на выгрузку сырых логов.
+- Параметры: `counter_id` (string, required)
+- API: `GET /logs/v1/counter/{counter_id}/logrequests`
 
 ---
 
 ### `metrika_create_log_request`
 Создать запрос на выгрузку логов.
-```json
-{
-  "properties": {
-    "counter_id": { "type": "string", "description": "ID счётчика" },
-    "fields":     { "type": "string", "description": "Поля через запятую" },
-    "source":     { "type": "string", "description": "visits или hits", "enum": ["visits", "hits"] },
-    "date1":      { "type": "string", "description": "Начало периода YYYY-MM-DD" },
-    "date2":      { "type": "string", "description": "Конец периода YYYY-MM-DD" }
-  },
-  "required": ["counter_id", "fields", "source", "date1", "date2"]
-}
-```
-→ Вызов: `POST /logs/v1/counter/{counter_id}/logrequests`
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `counter_id` | string | ID счётчика |
+| `fields` | string | Поля через запятую: `ym:s:visitID,ym:s:date` |
+| `source` | string | `visits` или `hits` |
+| `date1` | string | Начало: `YYYY-MM-DD` |
+| `date2` | string | Конец: `YYYY-MM-DD` |
+
+- API: `POST /logs/v1/counter/{counter_id}/logrequests?fields=...&source=...&date1=...&date2=...`
 
 ---
 
 ### `metrika_download_log`
-Скачать часть выгруженных логов.
-```json
-{
-  "properties": {
-    "counter_id":  { "type": "string", "description": "ID счётчика" },
-    "request_id":  { "type": "string", "description": "ID запроса логов" },
-    "part_number": { "type": "string", "description": "Номер части (default: 0)" }
-  },
-  "required": ["counter_id", "request_id"]
-}
-```
-→ Вызов: `GET /logs/v1/counter/{counter_id}/logrequest/{request_id}/part/{part}/download`
+Скачать часть выгруженных логов (возвращает TSV).
+- Параметры: `counter_id` (string, required), `request_id` (string, required), `part_number` (string, default: `0`)
+- API: `GET /logs/v1/counter/{counter_id}/logrequest/{request_id}/part/{part}/download`
 
-## Архитектура Go кода
+## Yandex Metrika API
 
 ```
-main.go
-  └── config.Load()           // читает env vars / .env файл
-  └── metrika.NewClient(cfg)  // HTTP клиент к Yandex API
-  └── mcp.NewServer(client)   // MCP сервер с зарегистрированными tools
-  └── server.Run(ctx)         // запуск stdio транспорта
+Base URL:         https://api-metrika.yandex.net
+Auth header:      Authorization: OAuth <ACCESS_TOKEN>
+Accept header:    application/json
+HTTP timeout:     30 секунд
+
+Management API:   /management/v1/
+Reports API:      /stat/v1/data
+Logs API:         /logs/v1/
+```
+
+HTTP ошибки возвращаются как `result.isError: true` с текстом `HTTP {код} from {path}: {тело}`.
+Тело ответа обрезается до 300 символов в сообщении об ошибке.
+
+Ответы Metrika API возвращаются клиенту как **prettified JSON** (`json.MarshalIndent`).
+Для Logs API (TSV формат) — возвращается как есть, без prettify.
+
+## Архитектура
+
+```
+cmd/server/main.go
+  ├── config.Load()              → читает ACCESS_TOKEN, LOG_LEVEL, LOG_FILE
+  ├── metrika.NewClient(token)   → HTTP клиент (30s timeout, WithBaseURL для тестов)
+  ├── mcp.NewStdioTransport(     → bufio.Scanner stdin (4MB), json.Encoder stdout
+  │       os.Stdin, os.Stdout)
+  └── mcp.NewServer(transport, client, logger, version)
+          └── .Run(ctx)          → основной цикл readline → dispatch → write
 
 mcp.Server
-  ├── transport: StdioTransport   // bufio.Scanner по stdin
-  ├── tools: []Tool               // статический реестр tools
-  ├── initialized: bool           // флаг после initialize handshake
-  └── Handle(ctx, req) Response   // роутер методов
+  ├── transport *StdioTransport
+  ├── metrika   *metrika.Client
+  ├── logger    *slog.Logger
+  ├── version   string
+  ├── initialized bool           → true после первого initialize
+  └── tools     []Tool           → статический реестр (buildToolRegistry)
 
 StdioTransport
-  ├── reader: *bufio.Scanner      // stdin
-  ├── writer: *json.Encoder       // stdout (с мьютексом!)
-  └── ReadRequest() / WriteResponse()
+  ├── scanner  *bufio.Scanner    → читает stdin построчно
+  ├── encoder  *json.Encoder     → пишет в stdout
+  └── mu       sync.Mutex        → защита encoder от concurrent writes
 
-MetrikaClient
-  ├── baseURL: string
-  ├── token: string
-  ├── httpClient: *http.Client
-  └── Methods: GetCounters, GetReport, GetGoals, ...
+metrika.Client
+  ├── baseURL     string
+  ├── token       string
+  ├── httpClient  *http.Client
+  └── get/getRaw/post            → внутренние HTTP методы
 ```
 
-## Важные детали реализации
+## Thread Safety
 
-### Thread safety для writer
+`StdioTransport.WriteResponse` защищён `sync.Mutex` — безопасен для конкурентных горутин:
 
 ```go
-type StdioTransport struct {
-    reader  *bufio.Scanner
-    encoder *json.Encoder
-    mu      sync.Mutex // защита записи в stdout
-}
-
 func (t *StdioTransport) WriteResponse(resp Response) error {
     t.mu.Lock()
     defer t.mu.Unlock()
-    return t.encoder.Encode(resp) // Encode добавляет \n
+    return t.encoder.Encode(resp) // Encode атомарно + добавляет \n
 }
 ```
 
-### Обработка неизвестных методов
+В текущей реализации сервер обрабатывает запросы последовательно в одной горутине — mutex нужен на случай будущих изменений.
 
-```go
-// Согласно MCP spec, неизвестные методы → MethodNotFound
-// НО: notifications (без id) просто игнорируются
-if req.ID == nil {
-    // это notification — игнорируем тихо
-    continue
-}
-return RPCError{Code: CodeMethodNotFound, Message: "method not found: " + req.Method}
-```
-
-### Graceful shutdown
-
-```go
-ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-defer cancel()
-
-// Когда stdin закрывается (EOF) — завершаем работу
-// Когда сигнал — завершаем работу
-```
-
-### Формат ответа Metrika в content
-
-Данные от Yandex Metrika API возвращаем как prettified JSON в `text` поле:
-
-```go
-func formatJSONResponse(v any) (string, error) {
-    b, err := json.MarshalIndent(v, "", "  ")
-    if err != nil {
-        return "", err
-    }
-    return string(b), nil
-}
-```
-
-## Тестирование MCP протокола
+## Тестирование
 
 ### Unit тесты
 
 ```go
-// Тест initialize handshake
-func TestInitialize(t *testing.T) {
-    client := metrika.NewMockClient()
-    srv := mcp.NewServer(client)
+// server_test.go — создаём Server с nil metrika client (tools не вызываем)
+func newTestServer(t *testing.T) *mockServer {
+    var out bytes.Buffer
+    transport := NewStdioTransport(strings.NewReader(""), &out)
+    logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+    srv := &Server{transport: transport, metrika: nil, logger: logger, version: "test"}
+    srv.tools = srv.buildToolRegistry()
+    return &mockServer{Server: srv, out: &out}
+}
 
-    req := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
-    resp := srv.HandleRaw([]byte(req))
+// transport_test.go — тестируем через strings.Reader / bytes.Buffer
+// metrika/client_test.go — тестируем с httptest.NewServer
+```
 
-    var result map[string]any
-    require.NoError(t, json.Unmarshal(resp, &result))
-    assert.Equal(t, "2024-11-05", result["result"].(map[string]any)["protocolVersion"])
+### E2E тест через stdin pipe
+
+```bash
+export $(grep -v '^#' .env | xargs)   # загрузить ACCESS_TOKEN из .env
+
+{
+  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n'
+  sleep 0.1
+  printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
+  sleep 0.1
+  printf '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+  sleep 0.2
+  printf '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"metrika_get_counters","arguments":{}}}\n'
+  sleep 3
+} | ACCESS_TOKEN="$ACCESS_TOKEN" ./bin/mcp-server 2>/dev/null
+```
+
+> Обрати внимание на `ACCESS_TOKEN="$ACCESS_TOKEN"` — явная передача, не полагаемся на godotenv при pipe.
+
+### MCP Inspector (веб-UI)
+
+```bash
+# Устанавливать не нужно — npx скачает автоматически
+ACCESS_TOKEN="$ACCESS_TOKEN" npx @modelcontextprotocol/inspector ./bin/mcp-server
+# Открывает http://localhost:5173
+```
+
+## Конфиг opencode
+
+```jsonc
+// opencode.jsonc в корне проекта ИЛИ ~/.config/opencode/opencode.jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "yandex-metrika": {
+      "type": "local",
+      "command": ["/absolute/path/to/yametrika-mcp"],  // production
+      // "command": ["./bin/mcp-server"],               // разработка
+      "enabled": true,
+      "env": {
+        "ACCESS_TOKEN": "y0_..."
+      }
+    }
+  }
 }
 ```
 
-### Integration тест (E2E)
-
-```bash
-# Последовательность запросов через pipe
-{
-  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
-  echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-  echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-  echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"metrika_get_counters","arguments":{}}}'
-} | ACCESS_TOKEN=$ACCESS_TOKEN ./bin/mcp-server
-```
-
-### MCP Inspector
-
-```bash
-npx @modelcontextprotocol/inspector ./bin/mcp-server
-# Открывает веб-UI на http://localhost:5173
-```
+> `command` требует **абсолютный путь** для production. Относительный путь `./bin/mcp-server` работает только если opencode запускается из корня проекта.

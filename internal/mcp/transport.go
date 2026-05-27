@@ -21,11 +21,10 @@ type StdioTransport struct {
 }
 
 // NewStdioTransport creates a new stdio transport.
-// bufSize controls the scanner buffer (default 1 MB is enough for most payloads).
+// Scanner buffer is 4 MB — enough for large Logs API responses.
 func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
 	scanner := bufio.NewScanner(r)
-	// Allow lines up to 4 MB (large log downloads can be chunky).
-	const maxTokenSize = 4 * 1024 * 1024
+	const maxTokenSize = 4 * 1024 * 1024 // 4 MB
 	scanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
 
 	return &StdioTransport{
