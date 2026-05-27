@@ -290,8 +290,8 @@ jobs:
 ### Локальная разработка документации
 
 ```bash
-# Установить инструменты (один раз)
-pip install mkdocs-material mkdocs-minify-plugin
+# Установить инструменты (версии зафиксированы в docs/requirements.txt)
+pip install -r docs/requirements.txt
 
 # Live preview с hot reload
 mkdocs serve

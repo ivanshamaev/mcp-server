@@ -35,10 +35,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install MkDocs Material
-        run: |
-          pip install \
-            mkdocs-material \
-            mkdocs-minify-plugin
+        run: pip install -r docs/requirements.txt
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

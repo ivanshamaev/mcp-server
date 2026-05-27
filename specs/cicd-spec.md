@@ -402,10 +402,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install MkDocs Material
-        run: |
-          pip install \
-            mkdocs-material \
-            mkdocs-minify-plugin
+        run: pip install -r docs/requirements.txt
 
       - uses: actions/configure-pages@v5
 
@@ -483,8 +480,8 @@ theme:
 ### Локальная разработка документации
 
 ```bash
-# Установить инструменты
-pip install mkdocs-material mkdocs-minify-plugin
+# Установить инструменты (версии зафиксированы в docs/requirements.txt)
+pip install -r docs/requirements.txt
 
 # Запустить live preview (hot reload)
 mkdocs serve
