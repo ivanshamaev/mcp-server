@@ -44,8 +44,10 @@ archives:
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
-      {{- .Os }}_
-      {{- .Arch }}
+      {{- if and (eq .Os "darwin") (eq .Arch "amd64") }}darwin_amd64_intel
+      {{- else if and (eq .Os "darwin") (eq .Arch "arm64") }}darwin_arm64_silicon
+      {{- else }}{{ .Os }}_{{ .Arch }}
+      {{- end }}
     files:
       - README.md
       - LICENSE*
