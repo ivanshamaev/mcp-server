@@ -8,12 +8,12 @@ import (
 
 // Counter represents a Yandex Metrika counter.
 type Counter struct {
-	ID       int    `json:"id"`
-	Status   string `json:"status"`
+	ID         int    `json:"id"`
+	Status     string `json:"status"`
 	OwnerLogin string `json:"owner_login"`
-	Name     string `json:"name"`
-	Site2    *Site  `json:"site2,omitempty"`
-	Type     string `json:"type"`
+	Name       string `json:"name"`
+	Site2      *Site  `json:"site2,omitempty"`
+	Type       string `json:"type"`
 }
 
 // Site holds the site info of a counter.

@@ -8,15 +8,15 @@ import (
 
 // LogRequest represents a Yandex Metrika Logs API request.
 type LogRequest struct {
-	RequestID   int    `json:"request_id"`
-	CounterID   int    `json:"counter_id"`
-	Source      string `json:"source"`
-	Date1       string `json:"date1"`
-	Date2       string `json:"date2"`
-	Fields      string `json:"fields"`
-	Status      string `json:"status"`
-	Size        int    `json:"size,omitempty"`
-	Parts       []any  `json:"parts,omitempty"`
+	RequestID int    `json:"request_id"`
+	CounterID int    `json:"counter_id"`
+	Source    string `json:"source"`
+	Date1     string `json:"date1"`
+	Date2     string `json:"date2"`
+	Fields    string `json:"fields"`
+	Status    string `json:"status"`
+	Size      int    `json:"size,omitempty"`
+	Parts     []any  `json:"parts,omitempty"`
 }
 
 type logRequestsResponse struct {

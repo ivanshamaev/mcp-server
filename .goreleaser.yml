@@ -36,11 +36,11 @@ builds:
 # ── Archives ──────────────────────────────────────────────────────────────────
 archives:
   - id: default
-    format: tar.gz
+    formats: [tar.gz]
     # Windows → .zip
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
