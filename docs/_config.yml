@@ -1,0 +1,25 @@
+title: "Go MCP Server — Developer Guide"
+description: "Руководство по созданию MCP сервера на Go для opencode с нуля"
+
+remote_theme: just-the-docs/just-the-docs
+
+# GitHub Pages
+url: "https://ivanshamaev.github.io"
+baseurl: "/mcp-server"
+
+# just-the-docs settings
+color_scheme: default
+search_enabled: true
+heading_anchors: true
+permalink: pretty
+
+# Navigation
+nav_sort: order
+
+# Footer
+footer_content: "Создано с ❤️ на Go. <a href=\"https://github.com/ivanshamaev/mcp-server\">Исходный код на GitHub</a>."
+
+# Plugins (supported by GitHub Pages)
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag

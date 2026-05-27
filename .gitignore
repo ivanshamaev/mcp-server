@@ -24,3 +24,9 @@ go.work.sum
 Thumbs.db
 # goreleaser output
 dist/
+
+# Jekyll (docs/)
+_site/
+.sass-cache/
+.jekyll-cache/
+docs/Gemfile.lock
