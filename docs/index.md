@@ -1,86 +1,141 @@
 ---
-layout: default
-title: Главная
-nav_order: 1
-description: "Руководство по созданию MCP сервера на Go для opencode"
-permalink: /
+template: home.html
+title: Go MCP Server — Developer Guide
+hide:
+  - navigation
+  - toc
 ---
 
-# Go MCP Server — Developer Guide
-{: .fs-9 }
+## Что вы построите
 
-Полное руководство по созданию MCP (Model Context Protocol) сервера на Go для любого API — от нуля до production.
-{: .fs-6 .fw-300 }
+<div class="grid cards" markdown>
 
-[Начать →]({{ site.baseurl }}/overview){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
-[GitHub](https://github.com/ivanshamaev/mcp-server){: .btn .fs-5 .mb-4 .mb-md-0 }
+-   :fontawesome-brands-golang:{ .lg .middle } **Чистый Go**
+
+    ---
+
+    Никаких фреймворков — только stdlib + один пакет для `.env`.
+    Статические бинарники без зависимостей от системы.
+
+    [:octicons-arrow-right-24: Начать](overview.md)
+
+-   :material-network:{ .lg .middle } **MCP Protocol**
+
+    ---
+
+    JSON-RPC 2.0 over stdio. Совместим с opencode, Claude Code
+    и любым MCP-клиентом. Протокол `2024-11-05`.
+
+    [:octicons-arrow-right-24: Протокол](protocol.md)
+
+-   :material-tools:{ .lg .middle } **Tools за 4 шага**
+
+    ---
+
+    API метод → регистрация → handler → тест.
+    Каждый новый инструмент занимает ~30 минут.
+
+    [:octicons-arrow-right-24: Добавить tool](adding-tools.md)
+
+-   :material-rocket-launch:{ .lg .middle } **Multi-platform CI/CD**
+
+    ---
+
+    GitHub Actions + goreleaser: Linux, macOS (Intel + Silicon),
+    Windows. Автоматические релизы по тегу.
+
+    [:octicons-arrow-right-24: CI/CD](cicd.md)
+
+</div>
 
 ---
-
-## Что это?
-
-Это практическое руководство по созданию MCP сервера на Go, основанное на реальном проекте [yametrika-mcp](https://github.com/ivanshamaev/mcp-server) — интеграции Yandex Metrika с AI-редакторами через открытый протокол MCP.
-
-MCP (Model Context Protocol) позволяет AI-помощникам (Claude Code, opencode и другим) напрямую обращаться к внешним API через стандартизированный интерфейс инструментов (tools).
-
-## Что вы получите
-
-После изучения этого руководства вы сможете создать MCP сервер для **любого REST API**, который будет:
-
-- ✅ Работать через stdio JSON-RPC 2.0 (стандарт MCP)
-- ✅ Подключаться к opencode / Claude Code / любому MCP-клиенту
-- ✅ Собираться для Linux, macOS (Intel + Silicon), Windows
-- ✅ Иметь CI/CD с автоматическими релизами через goreleaser
-
-## Разделы руководства
-
-| Раздел | Описание |
-|--------|----------|
-| [Обзор и концепции]({{ site.baseurl }}/overview) | Что такое MCP, архитектура, протокол |
-| [Предварительные требования]({{ site.baseurl }}/prerequisites) | Установка Go, инструментов |
-| [Структура проекта]({{ site.baseurl }}/project-structure) | Пакеты, файлы, принципы организации |
-| [Протокол и транспорт]({{ site.baseurl }}/protocol) | JSON-RPC 2.0, stdio транспорт, lifecycle |
-| [Реализация сервера]({{ site.baseurl }}/server) | Server, типы, handlers |
-| [HTTP клиент]({{ site.baseurl }}/api-client) | Паттерны для любого REST API |
-| [Добавление инструментов]({{ site.baseurl }}/adding-tools) | Пошаговый процесс добавления tool |
-| [Тестирование]({{ site.baseurl }}/testing) | Unit тесты, E2E тесты протокола |
-| [CI/CD и релизы]({{ site.baseurl }}/cicd) | GitHub Actions, goreleaser, versioning |
-| [Решение проблем]({{ site.baseurl }}/troubleshooting) | Типичные ошибки и их исправление |
 
 ## Быстрый старт
 
-```bash
-# 1. Создать проект
-mkdir my-api-mcp && cd my-api-mcp
-git init
-export PATH="$HOME/.local/go/bin:$PATH"
-go mod init github.com/username/my-api-mcp
+=== "Создать проект"
 
-# 2. Скопировать шаблон MCP слоя
-mkdir -p cmd/server internal/{mcp,myapi,config}
+    ```bash
+    mkdir my-api-mcp && cd my-api-mcp
+    git init
+    export PATH="$HOME/.local/go/bin:$PATH"
+    go mod init github.com/username/my-api-mcp
+    go get github.com/joho/godotenv
+    mkdir -p cmd/server internal/{mcp,myapi,config}
+    ```
 
-# 3. Реализовать (следуй разделу "Реализация сервера")
+=== "Собрать и запустить"
 
-# 4. Собрать и протестировать
-go build -o bin/mcp-server ./cmd/server
-go test ./... -v
+    ```bash
+    go build -o bin/mcp-server ./cmd/server
+    ACCESS_TOKEN=your_token ./bin/mcp-server
+    ```
 
-# 5. E2E тест
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}\n' \
-  | ./bin/mcp-server
+=== "E2E тест"
+
+    ```bash
+    {
+      printf '{"jsonrpc":"2.0","id":1,"method":"initialize",\
+    "params":{"protocolVersion":"2024-11-05","capabilities":{},\
+    "clientInfo":{"name":"test","version":"1"}}}\n'
+      sleep 0.2
+      printf '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+      sleep 0.3
+    } | ACCESS_TOKEN=tok ./bin/mcp-server 2>/dev/null
+    ```
+
+=== "opencode config"
+
+    ```jsonc
+    // opencode.jsonc
+    {
+      "mcp": {
+        "my-api": {
+          "type": "local",
+          "command": ["/absolute/path/to/bin/mcp-server"],
+          "enabled": true,
+          "env": { "ACCESS_TOKEN": "your_token" }
+        }
+      }
+    }
+    ```
+
+---
+
+## Как работает архитектура
+
+```mermaid
+graph LR
+    A["🤖 AI Client<br/>(opencode / Claude Code)"] -->|"JSON-RPC 2.0<br/>over stdio"| B["MCP Server<br/>(Go binary)"]
+    B -->|"HTTP REST"| C["Your API<br/>(любой REST)"]
+
+    style A fill:#4527a0,color:#fff,stroke:none
+    style B fill:#1565c0,color:#fff,stroke:none
+    style C fill:#00695c,color:#fff,stroke:none
 ```
 
-## Технический стек
+**Поток вызова:**
 
 ```
-Go 1.22+
-└── stdlib only (encoding/json, net/http, log/slog, ...)
-    └── github.com/joho/godotenv (загрузка .env)
-
-MCP протокол: 2024-11-05 (stable)
-Transport: stdio JSON-RPC 2.0 (newline-delimited)
-
-CI/CD:
-├── GitHub Actions (test × 3 платформы, lint, build × 5 платформ)
-└── goreleaser v2 (кросс-компиляция, GitHub Releases)
+User: "Покажи статистику за неделю"
+  ↓ AI решает вызвать tool
+tools/call myapi_get_report(date1=7daysAgo)
+  ↓ MCP Server
+GET https://api.example.com/report?date1=7daysAgo
+  ↓ JSON данные
+AI форматирует и отвечает пользователю
 ```
+
+---
+
+## Стек
+
+| Слой | Технология |
+|------|-----------|
+| Протокол | MCP `2024-11-05`, JSON-RPC 2.0 |
+| Транспорт | stdio (newline-delimited JSON) |
+| Язык | Go 1.22+ |
+| Зависимости | `github.com/joho/godotenv` (1 пакет) |
+| CI | GitHub Actions (test × 3 ОС, lint, build × 5 платформ) |
+| Релизы | goreleaser v2 |
+
+> \* Один внешний пакет для загрузки `.env`. Всё остальное — стандартная библиотека Go.

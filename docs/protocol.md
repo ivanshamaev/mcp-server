@@ -1,27 +1,10 @@
----
-layout: default
-title: Протокол и транспорт
-nav_order: 5
-permalink: /protocol
----
-
 # Протокол и транспорт
-{: .no_toc }
-
-<details open markdown="block">
-  <summary>Содержание</summary>
-  {: .text-delta }
-1. TOC
-{:toc}
-</details>
-
----
 
 ## Типы JSON-RPC (`internal/mcp/types.go`)
 
-Начнём с определения всех типов. Этот файл одинаков для любого MCP сервера — копируйте as-is.
+Этот файл одинаков для любого MCP сервера — копируйте as-is.
 
-```go
+```go title="internal/mcp/types.go"
 package mcp
 
 import "encoding/json"
@@ -52,7 +35,6 @@ type RPCError struct {
     Data    any    `json:"data,omitempty"`
 }
 
-// Стандартные коды ошибок JSON-RPC 2.0.
 const (
     CodeParseError     = -32700  // невалидный JSON
     CodeInvalidRequest = -32600  // нарушена структура JSON-RPC
@@ -60,25 +42,22 @@ const (
     CodeInvalidParams  = -32602  // неверные параметры
     CodeInternalError  = -32603  // внутренняя ошибка сервера
 )
+
+func okResponse(id *json.RawMessage, result any) Response {
+    return Response{JSONRPC: "2.0", ID: id, Result: result}
+}
+
+func errorResponse(id *json.RawMessage, code int, msg string) Response {
+    return Response{JSONRPC: "2.0", ID: id, Error: &RPCError{Code: code, Message: msg}}
+}
 ```
 
 ### Почему `*json.RawMessage` для ID?
 
 ID в JSON-RPC может быть строкой, числом или `null`. `*json.RawMessage` позволяет:
-1. Передать ID клиенту обратно без изменений
+
+1. Передать ID клиенту обратно **без изменений**
 2. Различить `null` (явный null) и отсутствие поля (уведомление)
-
-```go
-// Ответ на запрос
-func okResponse(id *json.RawMessage, result any) Response {
-    return Response{JSONRPC: "2.0", ID: id, Result: result}
-}
-
-// Ответ с ошибкой
-func errorResponse(id *json.RawMessage, code int, msg string) Response {
-    return Response{JSONRPC: "2.0", ID: id, Error: &RPCError{Code: code, Message: msg}}
-}
-```
 
 ### MCP-специфичные типы
 
@@ -89,26 +68,13 @@ type ToolCallResult struct {
     IsError bool          `json:"isError,omitempty"`
 }
 
-// Единица контента (текст, изображение, ресурс)
+// Единица контента
 type ContentItem struct {
     Type string `json:"type"` // "text" | "image" | "resource"
     Text string `json:"text,omitempty"`
 }
 
-// Параметры tools/call
-type ToolCallParams struct {
-    Name      string         `json:"name"`
-    Arguments map[string]any `json:"arguments"`
-}
-
-// Описание инструмента (для tools/list)
-type Tool struct {
-    Name        string      `json:"name"`
-    Description string      `json:"description"`
-    InputSchema InputSchema `json:"inputSchema"`
-}
-
-// JSON Schema для входных параметров инструмента
+// JSON Schema для входных параметров
 type InputSchema struct {
     Type       string              `json:"type"` // всегда "object"
     Properties map[string]Property `json:"properties"`
@@ -127,9 +93,9 @@ type Property struct {
 
 ## Транспорт (`internal/mcp/transport.go`)
 
-Транспорт — это тонкий слой между stdio и JSON-RPC. Одинаков для любого MCP сервера.
+Тонкий слой между stdio и JSON-RPC. Одинаков для любого MCP сервера.
 
-```go
+```go title="internal/mcp/transport.go"
 package mcp
 
 import (
@@ -149,7 +115,8 @@ type StdioTransport struct {
 func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
     scanner := bufio.NewScanner(r)
 
-    // 4 MB буфер — нужен для больших ответов (Logs API, большие JSON)
+    // 4 MB буфер — нужен для больших ответов API
+    // По умолчанию Scanner имеет 64 KB — этого мало
     const maxTokenSize = 4 * 1024 * 1024
     scanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
 
@@ -158,11 +125,7 @@ func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
         encoder: json.NewEncoder(w),
     }
 }
-```
 
-### Чтение запросов
-
-```go
 func (t *StdioTransport) ReadRequest() (*Request, error) {
     if !t.scanner.Scan() {
         if err := t.scanner.Err(); err != nil {
@@ -180,14 +143,7 @@ func (t *StdioTransport) ReadRequest() (*Request, error) {
     }
     return &req, nil
 }
-```
 
-{: .important }
-> `bufio.Scanner` читает построчно. Каждый JSON-RPC message — одна строка. Это стандарт MCP stdio транспорта.
-
-### Запись ответов
-
-```go
 func (t *StdioTransport) WriteResponse(resp Response) error {
     t.mu.Lock()
     defer t.mu.Unlock()
@@ -195,65 +151,31 @@ func (t *StdioTransport) WriteResponse(resp Response) error {
 }
 ```
 
-Mutex нужен если вы когда-нибудь захотите отправлять ответы из goroutine.
-
-### Ошибки транспорта
-
-```go
-// Невалидный JSON
-type parseError struct {
-    raw string
-    err error
-}
-func (e *parseError) Error() string {
-    return fmt.Sprintf("parse error: %v (raw: %.80s)", e.err, e.raw)
-}
-
-// Нарушена структура JSON-RPC
-type invalidRequestError struct{ msg string }
-func (e *invalidRequestError) Error() string { return "invalid request: " + e.msg }
-```
+!!! info "Размер буфера: почему 4 MB?"
+    По умолчанию `bufio.Scanner` имеет буфер **64 KB**. Этого мало для:
+    
+    - Больших ответов API с тысячами записей
+    - Logs API (TSV данные могут быть мегабайтами)
+    - Списков с деталями по каждому объекту
+    
+    Симптом превышения: `bufio.Scanner: token too long`
 
 ---
 
-## Размер буфера: почему 4 MB?
+## Protocol vs Tool errors
 
-По умолчанию `bufio.Scanner` имеет буфер 64 KB. Это мало для:
-- Больших ответов API с тысячами записей
-- Logs API (TSV данные могут быть мегабайтами)
-- Списков с деталями по каждому объекту
+```mermaid
+flowchart LR
+    A[Входящий запрос] --> B{Валидный JSON?}
+    B -->|Нет| C[parseError → error -32700]
+    B -->|Да| D{Известный метод?}
+    D -->|Нет| E[error -32601]
+    D -->|Да| F{Вызов tool}
+    F -->|API ошибка| G[result.isError: true]
+    F -->|Успех| H[result.content: данные]
 
-Симптом превышения буфера: `bufio.Scanner: token too long`
-
-{: .note }
-> 4 MB — достаточно для практически любого одиночного JSON ответа. Для потоковых данных (если API возвращает гигабайты) нужен другой подход — разбивайте на части на уровне API клиента.
-
----
-
-## Обработка ошибок протокола vs ошибок tool
-
-Разница критична для правильной работы клиента:
-
+    style C fill:#c62828,color:#fff
+    style E fill:#c62828,color:#fff
+    style G fill:#e65100,color:#fff
+    style H fill:#1b5e20,color:#fff
 ```
-Сценарий 1: Неизвестный метод
-─────────────────────────────
-→ {"method": "unknown/method", "id": 1}
-← {"id": 1, "error": {"code": -32601, "message": "method not found"}}
-   ^^^^^^^^
-   Это protocol error — клиент знает что метод не существует
-
-Сценарий 2: API вернул 404
-──────────────────────────
-→ {"method": "tools/call", "params": {"name": "myapi_get_user", ...}}
-← {"id": 1, "result": {"content": [{"type": "text", "text": "User not found: 404"}], "isError": true}}
-                        ^^^^^^^^^
-                        Это tool error — протокол работает, но инструмент вернул ошибку
-```
-
-Правило: **никогда не используйте JSON-RPC `error` для ошибок бизнес-логики**.
-
----
-
-## Что дальше?
-
-- [Реализация сервера]({{ site.baseurl }}/server) — Server struct и main loop

@@ -25,7 +25,7 @@ Thumbs.db
 # goreleaser output
 dist/
 
-# Jekyll (docs/)
+# MkDocs / Jekyll (docs build)
 _site/
 .sass-cache/
 .jekyll-cache/

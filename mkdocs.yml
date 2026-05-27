@@ -1,0 +1,127 @@
+site_name: Go MCP Server
+site_description: Полное руководство по созданию MCP сервера на Go для любого API
+site_url: https://ivanshamaev.github.io/mcp-server/
+repo_url: https://github.com/ivanshamaev/mcp-server
+repo_name: ivanshamaev/mcp-server
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: _site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Тёмная тема
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Светлая тема
+
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - announce.dismiss
+
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+  icon:
+    repo: fontawesome/brands/github
+    admonition:
+      note: octicons/tag-16
+      warning: octicons/alert-16
+      danger: octicons/stop-16
+      tip: octicons/squirrel-16
+      success: octicons/check-16
+      example: octicons/beaker-16
+
+  custom_dir: docs/overrides
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ivanshamaev/mcp-server
+      name: GitHub репозиторий
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - search:
+      lang: ru
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      linenums_style: pymdownx-inline
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Ссылка на этот раздел
+
+nav:
+  - Главная: index.md
+  - Обзор: overview.md
+  - Начало работы:
+    - start/index.md
+    - Предварительные требования: prerequisites.md
+    - Структура проекта: project-structure.md
+  - Реализация:
+    - implementation/index.md
+    - Протокол и транспорт: protocol.md
+    - Сервер: server.md
+    - HTTP клиент: api-client.md
+  - Инструменты:
+    - tools/index.md
+    - Добавление tools: adding-tools.md
+  - DevOps:
+    - devops/index.md
+    - Тестирование: testing.md
+    - CI/CD и релизы: cicd.md
+  - Решение проблем: troubleshooting.md

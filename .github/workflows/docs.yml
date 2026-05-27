@@ -5,19 +5,18 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
-  workflow_dispatch:   # ручной запуск из GitHub UI
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Разрешения для деплоя GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Не запускать несколько деплоев одновременно
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -30,21 +29,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          ruby-version: '3.3'
-          bundler-cache: true     # автоматически запускает bundle install
-          working-directory: docs
+          python-version: '3.x'
+
+      - name: Install MkDocs Material
+        run: |
+          pip install \
+            mkdocs-material \
+            mkdocs-minify-plugin
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Build Jekyll site
-        working-directory: docs
-        run: bundle exec jekyll build --destination ../_site
-        env:
-          JEKYLL_ENV: production
+      - name: Build MkDocs site
+        run: mkdocs build --site-dir _site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

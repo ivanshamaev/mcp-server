@@ -1,0 +1,185 @@
+{% extends "main.html" %}
+
+{% block tabs %}
+{{ super() }}
+<style>
+  .md-hero {
+    background: linear-gradient(135deg, #1a1a3e 0%, #0d1b2a 50%, #0a0a1a 100%);
+    padding: 5rem 1rem 4rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .md-hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at center, rgba(124, 77, 255, 0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 60%, rgba(0, 229, 255, 0.1) 0%, transparent 50%);
+    animation: pulse 8s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.05); opacity: 1; }
+  }
+
+  .md-hero__inner {
+    position: relative;
+    z-index: 1;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .md-hero__badge {
+    display: inline-block;
+    background: rgba(0, 229, 255, 0.1);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    color: #00e5ff;
+    padding: 0.3rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+
+  .md-hero__title {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(135deg, #e8e8ff 0%, #00e5ff 50%, #7c4dff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .md-hero__subtitle {
+    font-size: 1.2rem;
+    color: rgba(255,255,255,0.6);
+    font-weight: 300;
+    line-height: 1.6;
+    max-width: 560px;
+    margin: 0 auto 2.5rem;
+  }
+
+  .md-hero__actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .md-hero__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 2.25rem;
+    border-radius: 2rem;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    letter-spacing: -0.01em;
+  }
+
+  .md-hero__btn--primary {
+    background: linear-gradient(135deg, #7c4dff, #00b0ff);
+    color: white;
+    box-shadow: 0 4px 20px rgba(124, 77, 255, 0.5);
+  }
+
+  .md-hero__btn--primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(124, 77, 255, 0.6);
+    color: white;
+  }
+
+  .md-hero__btn--secondary {
+    border: 1.5px solid rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.85);
+    backdrop-filter: blur(10px);
+  }
+
+  .md-hero__btn--secondary:hover {
+    border-color: rgba(255,255,255,0.5);
+    color: white;
+    transform: translateY(-3px);
+    background: rgba(255,255,255,0.05);
+  }
+
+  .md-hero__stats {
+    display: flex;
+    gap: 3rem;
+    justify-content: center;
+    margin-top: 3rem;
+    padding-top: 2.5rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .md-hero__stat {
+    text-align: center;
+  }
+
+  .md-hero__stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #00e5ff;
+    letter-spacing: -0.03em;
+  }
+
+  .md-hero__stat-label {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.25rem;
+  }
+</style>
+
+<section class="md-hero">
+  <div class="md-hero__inner">
+    <div class="md-hero__badge">MCP Protocol 2024-11-05 · Go 1.22+</div>
+    <h1 class="md-hero__title">Go MCP Server<br>Developer Guide</h1>
+    <p class="md-hero__subtitle">
+      Подключи любой REST API к AI-ассистентам за один день.<br>
+      Без фреймворков. Только Go и стандартная библиотека.
+    </p>
+    <div class="md-hero__actions">
+      <a href="{{ page.next_page.url | url }}" class="md-hero__btn md-hero__btn--primary">
+        Начать →
+      </a>
+      <a href="https://github.com/ivanshamaev/mcp-server" class="md-hero__btn md-hero__btn--secondary">
+        GitHub ↗
+      </a>
+    </div>
+    <div class="md-hero__stats">
+      <div class="md-hero__stat">
+        <div class="md-hero__stat-value">8</div>
+        <div class="md-hero__stat-label">MCP Tools</div>
+      </div>
+      <div class="md-hero__stat">
+        <div class="md-hero__stat-value">5</div>
+        <div class="md-hero__stat-label">Платформ</div>
+      </div>
+      <div class="md-hero__stat">
+        <div class="md-hero__stat-value">0</div>
+        <div class="md-hero__stat-label">Зависимостей*</div>
+      </div>
+      <div class="md-hero__stat">
+        <div class="md-hero__stat-value">∞</div>
+        <div class="md-hero__stat-label">Возможностей</div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block content %}{{ super() }}{% endblock %}
