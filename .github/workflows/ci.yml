@@ -115,8 +115,6 @@ jobs:
   goreleaser-check:
     name: Goreleaser snapshot
     runs-on: ubuntu-latest
-    # Запускается только на PR — проверяем что goreleaser соберёт всё корректно
-    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
