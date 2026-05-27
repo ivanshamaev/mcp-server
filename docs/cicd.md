@@ -209,6 +209,7 @@ jobs:
 
 ## Goreleaser (`.goreleaser.yml`)
 
+{% raw %}
 ```yaml
 version: 2
 
@@ -236,9 +237,11 @@ builds:
       - -X main.commit={{ .ShortCommit }}
       - -X main.date={{ .Date }}
 ```
+{% endraw %}
 
 ### Именование архивов (Intel/Silicon для macOS)
 
+{% raw %}
 ```yaml
 archives:
   - formats: [tar.gz]        # ← НЕ format: (deprecated в v2!)
@@ -258,6 +261,7 @@ archives:
       - .env.example
       - opencode.jsonc
 ```
+{% endraw %}
 
 Результирующие имена:
 ```

@@ -30,19 +30,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true     # автоматически запускает bundle install
+          working-directory: docs
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Build Jekyll site
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./docs
-          destination: ./_site
+        run: bundle exec jekyll build --source docs --destination _site
+        env:
+          JEKYLL_ENV: production
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./_site
+          path: _site
 
   deploy:
     name: Deploy to GitHub Pages
