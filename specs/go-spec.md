@@ -285,6 +285,120 @@ func NewServer(transport *StdioTransport, mc *metrika.Client, ...) *Server
 func NewClient(token string, opts ...Option) *Client
 ```
 
+## Conventional Commits
+
+Горелизер генерирует changelog автоматически из сообщений коммитов. Формат:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+| Type | Секция в Release Notes | Пример |
+|------|----------------------|--------|
+| `feat` | 🚀 New Features | `feat: add metrika_get_sources tool` |
+| `fix` | 🐛 Bug Fixes | `fix(transport): handle EOF correctly` |
+| `perf` | ⚡ Performance | `perf: cache counters list` |
+| `refactor` | 🔧 Improvements | `refactor(mcp): extract handler interface` |
+| `chore` | 🔧 Improvements | `chore: update goreleaser config` |
+| `ci` | 🔧 Improvements | `ci: add macOS runner` |
+| `docs` | 📖 Documentation | `docs: update specs` |
+| `test` | (не попадает) | `test: add transport unit tests` |
+
+Breaking changes: добавь `!` после type → `feat!: rename all tools` — goreleaser пометит как major.
+
+Исключаются из changelog: `Merge ...`, `chore(deps):`, коммиты со словом `typo`.
+
+## Работа с зависимостями
+
+```bash
+# Добавить зависимость
+go get github.com/some/package@v1.2.3
+
+# Удалить неиспользуемые, синхронизировать go.sum
+go mod tidy
+
+# Проверить целостность модулей
+go mod verify
+
+# go.sum ВСЕГДА коммитится вместе с go.mod
+# go.sum — это lock-файл, обеспечивает воспроизводимые сборки
+git add go.mod go.sum
+```
+
+## Пагинация в API клиентах
+
+Если API возвращает данные постранично — собирай все страницы автоматически или пробрасывай параметры в tool:
+
+```go
+// Вариант 1: автоматический сбор всех страниц (для небольших датасетов)
+func (c *Client) GetAllItems(ctx context.Context) ([]Item, error) {
+    var all []Item
+    offset := 0
+    const limit = 100
+    for {
+        page, err := c.getItemsPage(ctx, offset, limit)
+        if err != nil {
+            return nil, fmt.Errorf("GetAllItems page %d: %w", offset/limit, err)
+        }
+        all = append(all, page.Items...)
+        if len(page.Items) < limit {
+            break // последняя страница
+        }
+        offset += limit
+    }
+    return all, nil
+}
+
+// Вариант 2: параметры пагинации в tool (для больших датасетов / Logs API)
+// Tool принимает limit и offset как аргументы
+```
+
+## Rate Limiting
+
+Yandex Metrika и большинство API имеют лимиты запросов. Базовая стратегия:
+
+```go
+// Retry с экспоненциальной задержкой при HTTP 429
+func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+    for attempt := 0; attempt < 3; attempt++ {
+        resp, err := c.httpClient.Do(req)
+        if err != nil {
+            return nil, err
+        }
+        if resp.StatusCode == http.StatusTooManyRequests {
+            resp.Body.Close()
+            select {
+            case <-req.Context().Done():
+                return nil, req.Context().Err()
+            case <-time.After(time.Duration(1<<attempt) * time.Second):
+            }
+            continue
+        }
+        return resp, nil
+    }
+    return nil, fmt.Errorf("rate limit exceeded after 3 retries")
+}
+```
+
+## Цепочка ошибок: HTTP → клиент → handler → JSON-RPC
+
+```
+HTTP 404 от API
+    ↓ client.get() возвращает
+fmt.Errorf("HTTP 404 from /counter/999: {\"errors\":[...]}")
+    ↓ метод клиента оборачивает
+fmt.Errorf("GetCounter 999: %w", err)
+    ↓ handler перехватывает
+errorContent("Ошибка получения счётчика 999: GetCounter 999: HTTP 404 ...")
+    ↓ executeTool возвращает ToolCallResult{IsError: true}
+    ↓ handleToolsCall оборачивает в okResponse (НЕ errorResponse!)
+{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"Ошибка..."}],"isError":true}}
+```
+
+Ключевое: API ошибки → `result.isError: true`, протокольные ошибки (неверный JSON, неизвестный метод) → `error` поле JSON-RPC.
+
 ## Важные инварианты
 
 1. **stdout = только JSON-RPC** — ни одной строки вне протокола
@@ -293,3 +407,4 @@ func NewClient(token string, opts ...Option) *Client
 4. **ldflags переменные объявлены** — если добавляешь `-X main.foo=...` в ldflags, объяви `var foo string` в `main.go`
 5. **go.sum коммитится** — всегда вместе с `go.mod`
 6. **No global state** — конфигурация через конструкторы и DI
+7. **Conventional Commits** — goreleaser парсит коммиты для changelog

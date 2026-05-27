@@ -28,8 +28,9 @@ make test-mcp
 mcp-server/
 ├── CLAUDE.md                   # Этот файл — старт сессии
 ├── specs/
-│   ├── go-spec.md              # Стандарты Go: форматирование, ошибки, тесты, сборка
-│   ├── mcp-server-spec.md      # MCP протокол: типы, методы, tools, архитектура
+│   ├── bootstrap-spec.md       # С нуля: Go → проект → первый tool → opencode → GitHub
+│   ├── go-spec.md              # Go стандарты: gofmt-s, ошибки, commits, пагинация
+│   ├── mcp-server-spec.md      # MCP протокол + дизайн tools для LLM + добавление tool
 │   └── cicd-spec.md            # CI/CD: GitHub Actions, goreleaser, версионирование
 ├── cmd/server/
 │   └── main.go                 # Точка входа

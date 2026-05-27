@@ -435,3 +435,176 @@ ACCESS_TOKEN="$ACCESS_TOKEN" npx @modelcontextprotocol/inspector ./bin/mcp-serve
 ```
 
 > `command` требует **абсолютный путь** для production. Относительный путь `./bin/mcp-server` работает только если opencode запускается из корня проекта.
+
+## Добавление нового Tool — пошагово
+
+Каждый новый tool затрагивает ровно 4 места:
+
+```
+1. internal/<api>/          → добавить метод клиента
+2. internal/mcp/server.go   → зарегистрировать в buildToolRegistry()
+3. internal/mcp/handlers.go → добавить case в executeTool() + метод toolXxx()
+4. internal/<api>/*_test.go → написать тест
+```
+
+### Пример: добавить `metrika_get_sources`
+
+**1. API метод** (`internal/metrika/sources.go`):
+```go
+type Source struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+}
+
+func (c *Client) GetSources(ctx context.Context, counterID string) ([]Source, error) {
+    var resp struct{ Sources []Source `json:"sources"` }
+    err := c.get(ctx, "/management/v1/counter/"+counterID+"/sources", nil, &resp)
+    if err != nil {
+        return nil, fmt.Errorf("GetSources %s: %w", counterID, err)
+    }
+    return resp.Sources, nil
+}
+```
+
+**2. Регистрация** в `buildToolRegistry()` (`internal/mcp/server.go`):
+```go
+{
+    Name:        "metrika_get_sources",
+    Description: "Получить список источников трафика счётчика",
+    InputSchema: InputSchema{
+        Type: "object",
+        Properties: map[string]Property{
+            "counter_id": {Type: "string", Description: "ID счётчика"},
+        },
+        Required: []string{"counter_id"},
+    },
+},
+```
+
+**3. Handler** (`internal/mcp/handlers.go`):
+```go
+// В executeTool():
+case "metrika_get_sources":
+    return s.toolGetSources(ctx, args)
+
+// Новый метод:
+func (s *Server) toolGetSources(ctx context.Context, args map[string]any) ToolCallResult {
+    id := getString(args, "counter_id")
+    if id == "" {
+        return errorContent("параметр counter_id обязателен")
+    }
+    sources, err := s.metrika.GetSources(ctx, id)
+    if err != nil {
+        return errorContent(fmt.Sprintf("Ошибка получения источников %s: %s", id, err))
+    }
+    result, _ := jsonText(sources)
+    return result
+}
+```
+
+**4. Тест** (`internal/metrika/sources_test.go`):
+```go
+func TestGetSources(t *testing.T) {
+    ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path != "/management/v1/counter/123/sources" {
+            t.Errorf("unexpected path: %s", r.URL.Path)
+        }
+        json.NewEncoder(w).Encode(struct{ Sources []Source `json:"sources"` }{
+            Sources: []Source{{ID: 1, Name: "Direct"}},
+        })
+    }))
+    defer ts.Close()
+
+    client := NewClient("tok", WithBaseURL(ts.URL))
+    sources, err := client.GetSources(context.Background(), "123")
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if len(sources) != 1 {
+        t.Errorf("want 1 source, got %d", len(sources))
+    }
+}
+```
+
+## Дизайн Tools для LLM
+
+### Именование
+
+```
+<api_prefix>_<action>_<resource>
+```
+
+- `metrika_get_counters` ✅ — понятно что делает
+- `getData` ❌ — непонятно что за данные
+- `metrika_counters` ❌ — непонятно это get или create
+
+Используй глаголы: `get`, `list`, `create`, `update`, `delete`, `download`, `search`.
+
+### Description — главный элемент для LLM
+
+Description должен отвечать на вопросы:
+1. **Что делает** tool?
+2. **Когда использовать** (в каком контексте LLM должен его выбрать)?
+3. **Что возвращает** (структура ответа)?
+
+```go
+// ❌ Плохо — слишком кратко
+Description: "Получить данные"
+
+// ✅ Хорошо — LLM понимает когда и зачем
+Description: "Получить статистический отчёт по метрикам и измерениям. " +
+    "Используй для анализа трафика, конверсий, источников за период. " +
+    "Возвращает данные с группировкой по указанным dimensions."
+```
+
+### InputSchema — помогай LLM заполнять параметры
+
+```go
+// ❌ Плохо — LLM не знает формат
+"date1": {Type: "string", Description: "Дата начала"}
+
+// ✅ Хорошо — явный формат + примеры
+"date1": {
+    Type:        "string",
+    Description: "Начало периода: YYYY-MM-DD или '7daysAgo', '30daysAgo', 'today', 'yesterday'",
+    Default:     "7daysAgo",
+}
+
+// ✅ Enum ограничивает выбор
+"source": {
+    Type:        "string",
+    Description: "Тип данных для выгрузки",
+    Enum:        []string{"visits", "hits"},
+}
+```
+
+### Форматирование ответов
+
+```go
+// ✅ Prettified JSON — LLM хорошо читает структурированные данные
+func jsonText(v any) (ToolCallResult, error) {
+    b, err := json.MarshalIndent(v, "", "  ")
+    ...
+    return textContent(string(b)), nil
+}
+
+// ✅ TSV/CSV — возвращай как есть (для логов, экспортов)
+return textContent(tsvData)
+
+// ❌ Не возвращай минифицированный JSON — LLM хуже с ним работает
+json.Marshal(v)  // без indent
+```
+
+### Разбивка на несколько tools vs один универсальный
+
+```
+// ✅ Лучше — несколько конкретных tools
+metrika_get_counters   — список счётчиков
+metrika_get_counter    — один счётчик
+metrika_get_report     — отчёт
+
+// ❌ Хуже — один god-tool с кучей опциональных параметров
+metrika_get_data(type: "counter"|"report"|"goals", ...)
+```
+
+LLM лучше выбирает из набора специализированных tools, чем конфигурирует один большой.
