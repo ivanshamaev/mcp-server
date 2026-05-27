@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	protocolVersion = "2024-11-05"
+	protocolVersion = "2025-11-25"
 	serverName      = "yandex-metrika-mcp"
 )
 
@@ -133,6 +133,15 @@ func (s *Server) handleInitialize(req *Request) Response {
 		"clientVersion", params.ClientInfo.Version,
 		"clientProtocol", params.ProtocolVersion,
 	)
+	// Log a warning if client requested a different protocol version.
+	// Server always responds with its own supported version (2025-11-25);
+	// per MCP spec the client should disconnect if it cannot accept our version.
+	if params.ProtocolVersion != protocolVersion {
+		s.logger.Warn("client requested different protocol version",
+			"clientVersion", params.ProtocolVersion,
+			"serverVersion", protocolVersion,
+		)
+	}
 
 	s.initialized = true
 

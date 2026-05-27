@@ -13,7 +13,8 @@
       "Bash(tar -C /home/ivan/.local -xzf /tmp/go.tar.gz)",
       "Bash(/home/ivan/.local/go/bin/go version *)",
       "Bash(grep \"^  [a-z].*:$\" .github/workflows/ci.yml)",
-      "Bash(grep \"^  [a-z].*:$\" .github/workflows/release.yml)"
+      "Bash(grep \"^  [a-z].*:$\" .github/workflows/release.yml)",
+      "Bash(git add *)"
     ]
   }
 }

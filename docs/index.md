@@ -24,7 +24,7 @@ hide:
     ---
 
     JSON-RPC 2.0 over stdio. Совместим с opencode, Claude Code
-    и любым MCP-клиентом. Протокол `2024-11-05`.
+    и любым MCP-клиентом. Протокол `2025-11-25`.
 
     [:octicons-arrow-right-24: Протокол](protocol.md)
 
@@ -75,7 +75,7 @@ hide:
     ```bash
     {
       printf '{"jsonrpc":"2.0","id":1,"method":"initialize",\
-    "params":{"protocolVersion":"2024-11-05","capabilities":{},\
+    "params":{"protocolVersion":"2025-11-25","capabilities":{},\
     "clientInfo":{"name":"test","version":"1"}}}\n'
       sleep 0.2
       printf '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
@@ -131,7 +131,7 @@ AI форматирует и отвечает пользователю
 
 | Слой | Технология |
 |------|-----------|
-| Протокол | MCP `2024-11-05`, JSON-RPC 2.0 |
+| Протокол | MCP `2025-11-25`, JSON-RPC 2.0 |
 | Транспорт | stdio (newline-delimited JSON) |
 | Язык | Go 1.22+ |
 | Зависимости | `github.com/joho/godotenv` (1 пакет) |

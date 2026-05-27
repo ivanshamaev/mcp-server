@@ -7,7 +7,16 @@
 
 ### Версия протокола
 
-Поддерживаемая версия: **`2024-11-05`** (стабильная, поддерживается opencode, Claude Code, Claude Desktop).
+Поддерживаемая версия: **`2025-11-25`** (актуальная стабильная).
+
+История версий: `2024-11-05` → `2025-03-26` → `2025-06-18` → **`2025-11-25`**
+
+Изменения в `2025-11-25` относительно `2024-11-05`:
+- `ClientInfo` / `ServerInfo`: новые опциональные поля `title`, `description`
+- `InitializeResult`: новое опциональное поле `instructions`
+- `ClientCapabilities.Elicitation`: расширена — добавлено подполе `url` (URL-based elicitation)
+- Уточнение: tool validation errors → `result.isError: true` (не protocol error)
+- Уточнение: stdio транспорт — все типы логов разрешены в `stderr`
 
 ## Транспорт: Stdio
 

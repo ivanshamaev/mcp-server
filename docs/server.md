@@ -6,7 +6,7 @@
 package mcp
 
 const (
-    protocolVersion = "2024-11-05"
+    protocolVersion = "2025-11-25"
     serverName      = "my-api-mcp"  // ← поменяйте на имя вашего сервера
 )
 

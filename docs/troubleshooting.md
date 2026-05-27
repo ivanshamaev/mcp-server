@@ -181,11 +181,11 @@ scanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
 === "Ручной тест"
 
     ```bash
-    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
+    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
       | ACCESS_TOKEN="$ACCESS_TOKEN" /absolute/path/to/bin/mcp-server
     ```
     
-    Должен вернуть JSON с `"result": {"protocolVersion": "2024-11-05", ...}`.
+    Должен вернуть JSON с `"result": {"protocolVersion": "2025-11-25", ...}`.
 
 === "Включить debug логи"
 

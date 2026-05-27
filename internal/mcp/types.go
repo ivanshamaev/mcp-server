@@ -72,27 +72,43 @@ type InitializeParams struct {
 }
 
 // InitializeResult is the result of the initialize request.
+// Instructions field added in MCP 2025-11-25.
 type InitializeResult struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    ServerCapabilities `json:"capabilities"`
 	ServerInfo      ServerInfo         `json:"serverInfo"`
+	Instructions    string             `json:"instructions,omitempty"` // added in 2025-11-25
 }
 
 // ClientInfo describes the MCP client.
+// Fields added in MCP 2025-11-25: Title, Description.
 type ClientInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name        string `json:"name"`
+	Title       string `json:"title,omitempty"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
 }
 
 // ServerInfo describes this MCP server.
+// Fields added in MCP 2025-11-25: Title, Description.
 type ServerInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name        string `json:"name"`
+	Title       string `json:"title,omitempty"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
 }
 
 // ClientCapabilities lists what the client supports.
+// ElicitationCapability expanded in MCP 2025-11-25 (url sub-capability).
 type ClientCapabilities struct {
-	Elicitation *struct{} `json:"elicitation,omitempty"`
+	Elicitation *ElicitationCapability `json:"elicitation,omitempty"`
+}
+
+// ElicitationCapability describes client-side elicitation support.
+// Introduced in MCP 2024-11-05, url sub-capability added in 2025-11-25.
+type ElicitationCapability struct {
+	Form *struct{} `json:"form,omitempty"`
+	URL  *struct{} `json:"url,omitempty"` // added in 2025-11-25
 }
 
 // ServerCapabilities lists what this server supports.

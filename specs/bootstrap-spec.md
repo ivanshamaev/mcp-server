@@ -268,7 +268,7 @@ go test ./... -v
 
 # E2E тест протокола
 {
-  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n'
+  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n'
   sleep 0.1
   printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
   sleep 0.1
@@ -279,7 +279,7 @@ go test ./... -v
 
 Ожидаемый вывод:
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05",...}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25",...}}
 {"jsonrpc":"2.0","id":2,"result":{"tools":[...]}}
 ```
 
@@ -320,7 +320,7 @@ EOF
 git add .
 git commit -m "feat: initial MCP server implementation
 
-- stdio JSON-RPC 2.0 transport (MCP spec 2024-11-05)
+- stdio JSON-RPC 2.0 transport (MCP spec 2025-11-25)
 - tools: myapi_get_items
 - GitHub Actions CI + goreleaser Release"
 
@@ -337,14 +337,17 @@ git push -u origin main
 1. **Settings → Actions → General → Workflow permissions:**
    Выбрать "Read and write permissions" — иначе goreleaser не сможет создавать Releases.
 
-2. **Settings → Branches → Branch protection rules** (для `main`):
+2. **Settings → Pages → Source:**
+   Выбрать **"GitHub Actions"** (не "Deploy from branch") — иначе `docs.yml` упадёт с `Pages deployment is disabled`.
+
+3. **Settings → Branches → Branch protection rules** (для `main`):
    - Require status checks before merging: `test`, `lint`
    - Require branches to be up to date before merging
    - Do not allow bypassing the above settings
 
 ### Опционально
 
-3. **Settings → Secrets → Actions**: если API требует секреты недоступные через env (нужен `GITHUB_TOKEN` уже доступен автоматически)
+4. **Settings → Secrets → Actions**: если API требует секреты недоступные через env (`GITHUB_TOKEN` уже доступен автоматически)
 
 ## Чеклист "готово к использованию"
 
@@ -356,3 +359,7 @@ git push -u origin main
 - [ ] E2E тест: `initialize` → `tools/list` → `tools/call` — ответы корректны
 - [ ] opencode видит server и может вызывать tools
 - [ ] CI зелёный на GitHub
+- [ ] Settings → Actions → Workflow permissions: "Read and write"
+- [ ] Settings → Pages → Source: "GitHub Actions"
+- [ ] `mkdocs build --strict` — документация собирается без ошибок
+- [ ] GitHub Pages задеплоено: `https://<user>.github.io/<repo>/`

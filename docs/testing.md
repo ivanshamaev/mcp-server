@@ -137,7 +137,7 @@ func TestTransport_EOF(t *testing.T) {
 go build -o bin/mcp-server ./cmd/server
 
 {
-  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n'
+  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}\n'
   sleep 0.1
   printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
   sleep 0.1
@@ -150,14 +150,14 @@ go build -o bin/mcp-server ./cmd/server
 
 Ожидаемый вывод:
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"my-api-mcp","version":"dev"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"my-api-mcp","version":"dev"}}}
 {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"myapi_get_users",...}]}}
 {"jsonrpc":"2.0","id":3,"result":{}}
 ```
 
 ```bash title="Тест конкретного tool"
 {
-  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}\n'
+  printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}\n'
   sleep 0.1
   printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
   sleep 0.1

@@ -228,6 +228,81 @@ gh run watch
 
 ---
 
+## Docs Workflow — GitHub Pages
+
+Документация публикуется автоматически при изменениях в `docs/` или `mkdocs.yml`.
+
+```yaml title=".github/workflows/docs.yml"
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false  # не прерывать активный деплой
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install mkdocs-material mkdocs-minify-plugin
+      - uses: actions/configure-pages@v5
+      - run: mkdocs build --site-dir _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+!!! warning "Обязательная настройка: Pages source"
+    **Settings → Pages → Source** → выбрать **"GitHub Actions"** (не "Deploy from branch").
+    
+    Без этого деплой падает с ошибкой:
+    ```
+    Error: Pages deployment is disabled.
+    ```
+
+### Локальная разработка документации
+
+```bash
+# Установить инструменты (один раз)
+pip install mkdocs-material mkdocs-minify-plugin
+
+# Live preview с hot reload
+mkdocs serve
+# → http://127.0.0.1:8000
+
+# Сборка (проверить до push)
+mkdocs build --strict
+```
+
+---
+
 ## GitHub Settings
 
 Перед первым релизом настройте репозиторий:
@@ -236,9 +311,6 @@ gh run watch
     **Settings → Actions → General → Workflow permissions:**
     Выбрать **"Read and write permissions"** — иначе goreleaser не сможет
     создавать GitHub Releases.
-
-!!! info "Для GitHub Pages"
-    **Settings → Pages → Source:** выбрать **GitHub Actions** (не "Deploy from branch").
 
 ---
 

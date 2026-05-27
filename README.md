@@ -6,7 +6,7 @@
 
 MCP (Model Context Protocol) сервер для интеграции **Yandex Metrika** с opencode, Claude Code и другими MCP-совместимыми клиентами.
 
-Транспорт: **stdio JSON-RPC 2.0** · Протокол: `2024-11-05` · Язык: **Go 1.22**
+Транспорт: **stdio JSON-RPC 2.0** · Протокол: `2025-11-25` · Язык: **Go 1.22**
 
 ## Установка
 

@@ -7,8 +7,9 @@
 | `push main`, PR в main | `ci.yml` | test (ubuntu+macos) · build · lint · goreleaser-check |
 | `push tag v*.*.*` | `release.yml` | release (goreleaser → GitHub Releases) |
 | Вручную (GitHub UI) | `release.yml` | release |
+| `push main` (docs/** изменены) | `docs.yml` | build (mkdocs) · deploy (GitHub Pages) |
 
-Файлы: `.github/workflows/ci.yml`, `.github/workflows/release.yml`
+Файлы: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/docs.yml`
 
 ## CI Workflow (`ci.yml`)
 
@@ -333,3 +334,183 @@ var (
     date    = "unknown"
 )
 ```
+
+---
+
+## Docs Workflow — GitHub Pages (`docs.yml`)
+
+### Назначение
+
+Автоматическая публикация документации на GitHub Pages при изменениях в `docs/` или `mkdocs.yml`.
+
+- Инструмент: **MkDocs + Material theme** (Python, pip install)
+- Хостинг: **GitHub Pages** (бесплатно для публичных репозиториев)
+- URL: `https://<user>.github.io/<repo>/`
+
+### Триггеры
+
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+```
+
+Path filter — деплой запускается **только при изменениях в docs/**.
+Изменения в Go-коде, CI-конфигах, README — не триггерят сборку документации.
+
+### Полный workflow
+
+```yaml
+# .github/workflows/docs.yml
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  pages: write       # создание/обновление GitHub Pages deployment
+  id-token: write    # OIDC токен для pages (обязательно для deploy-pages@v4)
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false  # не отменять текущий деплой при новом push
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs Material
+        run: |
+          pip install \
+            mkdocs-material \
+            mkdocs-minify-plugin
+
+      - uses: actions/configure-pages@v5
+
+      - name: Build MkDocs site
+        run: mkdocs build --site-dir _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+### Почему MkDocs, а не Jekyll
+
+| Критерий | MkDocs Material | Jekyll (github-pages gem) |
+|----------|----------------|--------------------------|
+| Установка | `pip install mkdocs-material` | Ruby + Bundler, версионные конфликты |
+| Тема | Material Design (современная) | just-the-docs требует Jekyll 4+, gem pages — только 3.x |
+| Mermaid | встроена в superfences | нужны сторонние плагины |
+| Templating | Jinja2 только для темы | Liquid движок — конфликтует с `{{ .Version }}` в goreleaser YAML в md-файлах |
+| Скорость сборки | ~5–10 сек | ~30–60 сек (зависимости Ruby) |
+
+### Настройка репозитория (одноразово)
+
+**Обязательно перед первым деплоем:**
+
+1. **Settings → Pages → Source** → выбрать **"GitHub Actions"** (не "Deploy from branch")
+
+   Без этого `actions/deploy-pages@v4` вернёт ошибку:
+   ```
+   Error: HttpError: Not Found - Pages deployment is disabled.
+   ```
+
+2. **Permissions уже правильные** в workflow (`pages: write`, `id-token: write`).
+   Дополнительных настроек Workflow permissions не нужно.
+
+### Структура MkDocs проекта
+
+```
+mcp-server/
+├── mkdocs.yml              # конфиг (site_name, theme, nav, plugins)
+├── docs/
+│   ├── index.md            # главная (template: home.html)
+│   ├── overrides/
+│   │   └── home.html       # кастомный hero-блок главной
+│   └── stylesheets/
+│       └── extra.css       # дополнительные стили
+└── _site/                  # выходная директория (в .gitignore)
+```
+
+### mkdocs.yml — ключевые опции
+
+```yaml
+site_name: Go MCP Server
+site_url: https://ivanshamaev.github.io/mcp-server/  # нужно для sitemap
+repo_url: https://github.com/ivanshamaev/mcp-server   # кнопка GitHub в шапке
+edit_uri: edit/main/docs/                              # ссылка "Редактировать на GitHub"
+site_dir: _site  # совпадает с path в upload-pages-artifact
+
+theme:
+  name: material
+  custom_dir: docs/overrides  # для кастомизации шаблонов
+```
+
+### Локальная разработка документации
+
+```bash
+# Установить инструменты
+pip install mkdocs-material mkdocs-minify-plugin
+
+# Запустить live preview (hot reload)
+mkdocs serve
+# → http://127.0.0.1:8000
+
+# Сборка в _site/
+mkdocs build
+
+# Проверить что сборка не сломана (полезно в pre-commit)
+mkdocs build --strict
+```
+
+`mkdocs serve` — запускает dev-сервер с hot reload. Изменения в `.md` и `mkdocs.yml` применяются сразу без перезапуска.
+
+### Gotcha: Pages source должен быть "GitHub Actions"
+
+После включения GitHub Pages в настройках — убедиться что выбран именно вариант **"GitHub Actions"**, не **"Deploy from a branch"**. 
+
+При `Deploy from a branch` Pages ожидает ветку `gh-pages`, а `deploy-pages@v4` деплоит через OIDC-артефакты — механизмы несовместимы.
+
+### Gotcha: `cancel-in-progress: false` для concurrency
+
+```yaml
+concurrency:
+  group: "pages"
+  cancel-in-progress: false  # ← важно!
+```
+
+`true` отменит текущий активный деплой Pages при новом push — GitHub Pages API не поддерживает прерывание деплоя на полпути. `false` ставит новые деплои в очередь.
