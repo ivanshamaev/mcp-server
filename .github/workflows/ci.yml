@@ -53,7 +53,7 @@ jobs:
           go tool cover -func=coverage.out | tail -1
 
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -108,3 +108,29 @@ jobs:
         with:
           version: v1.59
           args: --timeout=5m
+
+  goreleaser-check:
+    name: Goreleaser snapshot
+    runs-on: ubuntu-latest
+    # Запускается только на PR — проверяем что goreleaser соберёт всё корректно
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Goreleaser snapshot (dry-run)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
