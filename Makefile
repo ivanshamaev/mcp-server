@@ -41,7 +41,7 @@ test-race:
 test-mcp: build
 	@if [ -f .env ]; then export $$(grep -v '^#' .env | xargs); fi; \
 	{ \
-		printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"make-test","version":"1.0"}}}\n'; \
+		printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"make-test","version":"1.0"}}}\n'; \
 		sleep 0.1; \
 		printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'; \
 		sleep 0.1; \
@@ -111,6 +111,7 @@ tag-patch:
 	$(eval NEXT := $(shell echo $(CURRENT_VERSION) | awk -F. '{printf "%s.%s.%d", $$1, $$2, $$3+1}'))
 	@echo "Текущая версия: $(CURRENT_VERSION) → $(NEXT)"
 	@read -p "Подтвердить тег $(NEXT)? [y/N] " ans && [ "$$ans" = "y" ]
+	git push origin main
 	git tag -a $(NEXT) -m "Release $(NEXT)"
 	git push origin $(NEXT)
 	@echo "✅ Тег $(NEXT) создан и отправлен. GitHub Actions запустит релиз."
@@ -120,6 +121,7 @@ tag-minor:
 	$(eval NEXT := $(shell echo $(CURRENT_VERSION) | awk -F. '{printf "%s.%d.0", $$1, $$2+1}'))
 	@echo "Текущая версия: $(CURRENT_VERSION) → $(NEXT)"
 	@read -p "Подтвердить тег $(NEXT)? [y/N] " ans && [ "$$ans" = "y" ]
+	git push origin main
 	git tag -a $(NEXT) -m "Release $(NEXT)"
 	git push origin $(NEXT)
 	@echo "✅ Тег $(NEXT) создан и отправлен. GitHub Actions запустит релиз."
@@ -129,6 +131,7 @@ tag-major:
 	$(eval NEXT := $(shell echo $(CURRENT_VERSION) | awk -F. '{printf "v%d.0.0", $$1+1}' | sed 's/vv/v/'))
 	@echo "Текущая версия: $(CURRENT_VERSION) → $(NEXT)"
 	@read -p "⚠️  MAJOR релиз $(NEXT)! Подтвердить? [y/N] " ans && [ "$$ans" = "y" ]
+	git push origin main
 	git tag -a $(NEXT) -m "Release $(NEXT)"
 	git push origin $(NEXT)
 	@echo "✅ Тег $(NEXT) создан и отправлен. GitHub Actions запустит релиз."

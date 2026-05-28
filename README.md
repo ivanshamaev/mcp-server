@@ -68,8 +68,33 @@ LOG_FILE=             # путь к файлу лога, по умолчанию
 | `metrika_get_goals` | Цели счётчика |
 | `metrika_get_segments` | Сегменты счётчика |
 | `metrika_list_logs` | Список запросов на выгрузку логов |
+| `metrika_get_log_request` | Статус конкретного запроса логов |
 | `metrika_create_log_request` | Создать выгрузку сырых логов |
 | `metrika_download_log` | Скачать часть логов |
+| `metrika_clean_log_request` | Удалить запрос логов после скачивания |
+
+## Релизы
+
+Релиз создаётся тегом — GitHub Actions автоматически собирает бинарники для всех платформ и публикует GitHub Release.
+
+```bash
+# Посмотреть текущую версию
+make version
+
+# Создать тег и запустить релиз (интерактивно: покажет версию и попросит подтверждение)
+make tag-patch    # v1.0.0 → v1.0.1  (bugfix)
+make tag-minor    # v1.0.1 → v1.1.0  (новые tools, обратно совместимо)
+make tag-major    # v1.1.0 → v2.0.0  (breaking changes)
+```
+
+Вручную:
+
+```bash
+git tag -a v1.2.3 -m "Release v1.2.3"
+git push origin v1.2.3
+```
+
+Следить за сборкой: `gh run watch` или вкладка Actions на GitHub.
 
 ## Разработка
 
