@@ -95,11 +95,12 @@ release:
     owner: ivanshamaev
     name: mcp-server
   name_template: "{{ .ProjectName }} {{ .Tag }}"
+  replace_existing_artifacts: true
   header: |
     ## Yandex Metrika MCP Server {{ .Tag }}
 
     MCP сервер для интеграции Yandex Metrika с opencode и Claude Code.
-    Протокол: JSON-RPC 2.0 (stdio), совместим с MCP spec `2024-11-05`.
+    Протокол: JSON-RPC 2.0 (stdio), совместим с MCP spec `2025-11-25`.
 
     ### Установка
 
