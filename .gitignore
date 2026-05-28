@@ -30,3 +30,4 @@ _site/
 .sass-cache/
 .jekyll-cache/
 docs/Gemfile.lock
+reports/
