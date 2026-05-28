@@ -21,10 +21,14 @@ func (s *Server) executeTool(ctx context.Context, name string, args map[string]a
 		return s.toolGetSegments(ctx, args)
 	case "metrika_list_logs":
 		return s.toolListLogs(ctx, args)
+	case "metrika_get_log_request":
+		return s.toolGetLogRequest(ctx, args)
 	case "metrika_create_log_request":
 		return s.toolCreateLogRequest(ctx, args)
 	case "metrika_download_log":
 		return s.toolDownloadLog(ctx, args)
+	case "metrika_clean_log_request":
+		return s.toolCleanLogRequest(ctx, args)
 	default:
 		return errorContent(fmt.Sprintf("unknown tool: %s", name))
 	}
@@ -40,6 +44,20 @@ func getString(args map[string]any, key string) string {
 func getStringDefault(args map[string]any, key, def string) string {
 	if v, ok := args[key].(string); ok && v != "" {
 		return v
+	}
+	return def
+}
+
+// getIntString returns an integer parameter as a string, handling both JSON
+// number (float64) and string inputs. LLMs often pass numeric params as numbers.
+func getIntString(args map[string]any, key, def string) string {
+	switch v := args[key].(type) {
+	case string:
+		if v != "" {
+			return v
+		}
+	case float64:
+		return fmt.Sprintf("%.0f", v)
 	}
 	return def
 }
@@ -91,7 +109,7 @@ func (s *Server) toolGetReport(ctx context.Context, args map[string]any) ToolCal
 		"metrics": metrics,
 		"date1":   getStringDefault(args, "date1", "7daysAgo"),
 		"date2":   getStringDefault(args, "date2", "today"),
-		"limit":   getStringDefault(args, "limit", "100"),
+		"limit":   getIntString(args, "limit", "100"),
 	}
 	if v := getString(args, "dimensions"); v != "" {
 		params["dimensions"] = v
@@ -177,13 +195,41 @@ func (s *Server) toolCreateLogRequest(ctx context.Context, args map[string]any) 
 	return result
 }
 
+func (s *Server) toolGetLogRequest(ctx context.Context, args map[string]any) ToolCallResult {
+	counterID := getString(args, "counter_id")
+	requestID := getString(args, "request_id")
+	if counterID == "" || requestID == "" {
+		return errorContent("параметры counter_id и request_id обязательны")
+	}
+	logReq, err := s.metrika.GetLogRequest(ctx, counterID, requestID)
+	if err != nil {
+		return errorContent(fmt.Sprintf("Ошибка получения запроса логов %s/%s: %s", counterID, requestID, err))
+	}
+	result, _ := jsonText(logReq)
+	return result
+}
+
+func (s *Server) toolCleanLogRequest(ctx context.Context, args map[string]any) ToolCallResult {
+	counterID := getString(args, "counter_id")
+	requestID := getString(args, "request_id")
+	if counterID == "" || requestID == "" {
+		return errorContent("параметры counter_id и request_id обязательны")
+	}
+	logReq, err := s.metrika.CleanLogRequest(ctx, counterID, requestID)
+	if err != nil {
+		return errorContent(fmt.Sprintf("Ошибка удаления запроса логов %s/%s: %s", counterID, requestID, err))
+	}
+	result, _ := jsonText(logReq)
+	return result
+}
+
 func (s *Server) toolDownloadLog(ctx context.Context, args map[string]any) ToolCallResult {
 	counterID := getString(args, "counter_id")
 	requestID := getString(args, "request_id")
 	if counterID == "" || requestID == "" {
 		return errorContent("параметры counter_id и request_id обязательны")
 	}
-	partNumber := getStringDefault(args, "part_number", "0")
+	partNumber := getIntString(args, "part_number", "0")
 
 	data, err := s.metrika.DownloadLog(ctx, counterID, requestID, partNumber)
 	if err != nil {

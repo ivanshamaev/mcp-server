@@ -51,6 +51,27 @@ func (c *Client) CreateLogRequest(ctx context.Context, counterID, fields, source
 	return &resp.LogRequest, nil
 }
 
+// GetLogRequest returns the status of a specific log request.
+func (c *Client) GetLogRequest(ctx context.Context, counterID, requestID string) (*LogRequest, error) {
+	var resp logRequestResponse
+	path := fmt.Sprintf("/logs/v1/counter/%s/logrequest/%s", counterID, requestID)
+	if err := c.get(ctx, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("GetLogRequest %s/%s: %w", counterID, requestID, err)
+	}
+	return &resp.LogRequest, nil
+}
+
+// CleanLogRequest deletes a completed log request, freeing the slot.
+// Metrika limits the number of concurrent log requests per counter.
+func (c *Client) CleanLogRequest(ctx context.Context, counterID, requestID string) (*LogRequest, error) {
+	var resp logRequestResponse
+	path := fmt.Sprintf("/logs/v1/counter/%s/logrequest/%s/clean", counterID, requestID)
+	if err := c.post(ctx, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("CleanLogRequest %s/%s: %w", counterID, requestID, err)
+	}
+	return &resp.LogRequest, nil
+}
+
 // DownloadLog downloads a specific part of a completed log request.
 // Returns raw TSV text.
 func (c *Client) DownloadLog(ctx context.Context, counterID, requestID, partNumber string) (string, error) {

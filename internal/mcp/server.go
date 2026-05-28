@@ -154,6 +154,20 @@ func (s *Server) handleInitialize(req *Request) Response {
 			Name:    serverName,
 			Version: s.version,
 		},
+		Instructions: `Yandex Metrika MCP Server — доступ к аналитике сайтов через Yandex Metrika API.
+
+ТИПИЧНЫЕ СЦЕНАРИИ:
+- Трафик за период: metrika_get_report(metrics="ym:s:visits,ym:s:users", dimensions="ym:s:date")
+- Топ страниц: metrika_get_report(metrics="ym:s:visits", dimensions="ym:s:startURL", sort="-ym:s:visits")
+- Поисковые запросы: metrika_get_report(metrics="ym:s:visits", dimensions="ym:s:lastSignSearchPhrase", sort="-ym:s:visits")
+- Источники трафика: metrika_get_report(metrics="ym:s:visits", dimensions="ym:s:trafficSourceName,ym:s:searchEngineName")
+- Трафик на конкретный раздел: добавь filters="ym:s:startURL=@'/раздел'"
+
+ВАЖНО:
+- Для поисковых фраз используй ym:s:lastSignSearchPhrase (не ym:s:searchPhrase).
+- date1/date2: YYYY-MM-DD или ключевые слова today, yesterday, 7daysAgo, 30daysAgo, 90daysAgo.
+- Фильтры: == (равно), != (не равно), =@ (содержит), AND/OR для составных условий.
+- Logs API workflow: create_log_request → polling get_log_request(status='processed') → download_log → clean_log_request.`,
 	}
 	return okResponse(req.ID, result)
 }
@@ -188,7 +202,7 @@ func (s *Server) buildToolRegistry() []Tool {
 	return []Tool{
 		{
 			Name:        "metrika_get_counters",
-			Description: "Получить список всех счётчиков Yandex Metrika аккаунта",
+			Description: "Получить список всех счётчиков Yandex Metrika аккаунта. Используй, чтобы узнать доступные counter_id перед другими запросами. Возвращает id, name, site URL для каждого счётчика.",
 			InputSchema: InputSchema{
 				Type:       "object",
 				Properties: map[string]Property{},
@@ -196,7 +210,7 @@ func (s *Server) buildToolRegistry() []Tool {
 		},
 		{
 			Name:        "metrika_get_counter",
-			Description: "Получить подробную информацию о конкретном счётчике",
+			Description: "Получить подробную информацию о конкретном счётчике: статус, владелец, сайт. Используй, чтобы проверить что counter_id существует и доступен.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -206,27 +220,45 @@ func (s *Server) buildToolRegistry() []Tool {
 			},
 		},
 		{
-			Name:        "metrika_get_report",
-			Description: "Получить статистический отчёт по метрикам и измерениям (Reports API)",
+			Name: "metrika_get_report",
+			Description: `Получить статистический отчёт по метрикам и измерениям (Reports API /stat/v1/data).
+Используй для анализа трафика, конверсий, источников, страниц, поисковых запросов за период.
+
+МЕТРИКИ (metrics) — через запятую:
+  ym:s:visits — визиты, ym:s:users — уникальные пользователи,
+  ym:s:pageviews — просмотры страниц, ym:s:bounceRate — отказы (%),
+  ym:s:avgVisitDurationSeconds — средняя длительность визита
+
+ИЗМЕРЕНИЯ (dimensions) — через запятую:
+  ym:s:date — дата | ym:s:startURL — URL входа | ym:s:lastSignSearchPhrase — поисковая фраза,
+  приведшая к визиту (используй вместо ym:s:searchPhrase для актуальных данных) |
+  ym:s:trafficSourceName — источник трафика | ym:s:searchEngineName — поисковик |
+  ym:s:regionCityName — город | ym:s:deviceCategory — устройство (desktop/mobile/tablet)
+
+ФИЛЬТРЫ (filters) — синтаксис Metrika Filter:
+  ym:s:startURL=@'pyspark'       — URL содержит 'pyspark' (оператор =@)
+  ym:s:regionCityName=='Москва'  — точное совпадение (оператор ==)
+  ym:s:searchEngineName!='None'  — исключение
+  Составные: condition1 AND condition2 | condition1 OR condition2`,
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"counter_id": {Type: "string", Description: "ID счётчика"},
-					"metrics":    {Type: "string", Description: "Метрики через запятую, напр. ym:s:visits,ym:s:pageviews"},
-					"dimensions": {Type: "string", Description: "Измерения через запятую, напр. ym:s:date,ym:s:sourceEngine"},
-					"date1":      {Type: "string", Description: "Начало периода YYYY-MM-DD или 7daysAgo, today и т.д.", Default: "7daysAgo"},
-					"date2":      {Type: "string", Description: "Конец периода YYYY-MM-DD или today", Default: "today"},
-					"sort":       {Type: "string", Description: "Поле сортировки, напр. -ym:s:visits"},
-					"limit":      {Type: "string", Description: "Максимум строк в отчёте (1-100000)", Default: "100"},
-					"filters":    {Type: "string", Description: "Фильтры в формате Metrika Filter, напр. ym:s:regionCity=='Москва'"},
-					"group":      {Type: "string", Description: "Группировка: day, week, month"},
+					"metrics":    {Type: "string", Description: "Метрики через запятую, напр. ym:s:visits,ym:s:users"},
+					"dimensions": {Type: "string", Description: "Измерения через запятую, напр. ym:s:date,ym:s:lastSignSearchPhrase"},
+					"date1":      {Type: "string", Description: "Начало периода: YYYY-MM-DD или 7daysAgo, 30daysAgo, today, yesterday", Default: "7daysAgo"},
+					"date2":      {Type: "string", Description: "Конец периода: YYYY-MM-DD или today, yesterday", Default: "today"},
+					"sort":       {Type: "string", Description: "Поле сортировки; префикс '-' для убывания, напр. -ym:s:visits"},
+					"limit":      {Type: "integer", Description: "Максимум строк в ответе (1–100000)", Default: 100},
+					"filters":    {Type: "string", Description: "Фильтр Metrika, напр. ym:s:startURL=@'pyspark' AND ym:s:searchEngineName!='None'"},
+					"group":      {Type: "string", Description: "Группировка по времени: day, week, month"},
 				},
 				Required: []string{"counter_id", "metrics"},
 			},
 		},
 		{
 			Name:        "metrika_get_goals",
-			Description: "Получить список целей счётчика",
+			Description: "Получить список целей счётчика с их ID, названиями и условиями. Используй, чтобы узнать goal_id для фильтрации отчётов по конверсиям.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -237,7 +269,7 @@ func (s *Server) buildToolRegistry() []Tool {
 		},
 		{
 			Name:        "metrika_get_segments",
-			Description: "Получить список сегментов счётчика",
+			Description: "Получить список сегментов аудитории счётчика. Используй, чтобы узнать доступные сегменты для фильтрации отчётов.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -248,7 +280,7 @@ func (s *Server) buildToolRegistry() []Tool {
 		},
 		{
 			Name:        "metrika_list_logs",
-			Description: "Получить список запросов на выгрузку логов (Logs API)",
+			Description: "Получить список всех запросов на выгрузку логов для счётчика. Используй для просмотра существующих запросов и их статусов (created/processed/cleaned).",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
@@ -258,19 +290,31 @@ func (s *Server) buildToolRegistry() []Tool {
 			},
 		},
 		{
-			Name:        "metrika_create_log_request",
-			Description: "Создать запрос на выгрузку сырых логов посещений или хитов",
+			Name:        "metrika_get_log_request",
+			Description: "Получить статус конкретного запроса на выгрузку логов по его ID. Используй для проверки готовности: статус 'processed' означает что данные готовы к скачиванию. Статусы: created → processed → cleaned.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"counter_id": {Type: "string", Description: "ID счётчика"},
-					"fields":     {Type: "string", Description: "Поля через запятую, напр. ym:s:visitID,ym:s:date,ym:s:pageViews"},
+					"request_id": {Type: "string", Description: "ID запроса логов (из metrika_create_log_request или metrika_list_logs)"},
+				},
+				Required: []string{"counter_id", "request_id"},
+			},
+		},
+		{
+			Name:        "metrika_create_log_request",
+			Description: "Создать запрос на выгрузку сырых логов посещений (visits) или хитов (hits). После создания проверяй статус через metrika_get_log_request, пока не станет 'processed', затем скачивай через metrika_download_log.",
+			InputSchema: InputSchema{
+				Type: "object",
+				Properties: map[string]Property{
+					"counter_id": {Type: "string", Description: "ID счётчика"},
+					"fields":     {Type: "string", Description: "Поля через запятую, напр. ym:s:visitID,ym:s:date,ym:s:pageViews,ym:s:clientID"},
 					"source": {
 						Type:        "string",
-						Description: "Тип данных: visits (визиты) или hits (хиты)",
+						Description: "Тип данных: visits (визиты) или hits (хиты/просмотры страниц)",
 						Enum:        []string{"visits", "hits"},
 					},
-					"date1": {Type: "string", Description: "Начало периода YYYY-MM-DD"},
+					"date1": {Type: "string", Description: "Начало периода YYYY-MM-DD (не раньше 90 дней назад)"},
 					"date2": {Type: "string", Description: "Конец периода YYYY-MM-DD"},
 				},
 				Required: []string{"counter_id", "fields", "source", "date1", "date2"},
@@ -278,13 +322,25 @@ func (s *Server) buildToolRegistry() []Tool {
 		},
 		{
 			Name:        "metrika_download_log",
-			Description: "Скачать часть выгруженных логов (после создания запроса и ожидания его выполнения)",
+			Description: "Скачать часть выгруженных логов в формате TSV (после того как статус запроса стал 'processed'). Возвращает TSV-текст с заголовком в первой строке. Если логов несколько частей — перебирай part_number начиная с 0.",
 			InputSchema: InputSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"counter_id":  {Type: "string", Description: "ID счётчика"},
 					"request_id":  {Type: "string", Description: "ID запроса логов"},
-					"part_number": {Type: "string", Description: "Номер части (начиная с 0)", Default: "0"},
+					"part_number": {Type: "integer", Description: "Номер части (начиная с 0)", Default: 0},
+				},
+				Required: []string{"counter_id", "request_id"},
+			},
+		},
+		{
+			Name:        "metrika_clean_log_request",
+			Description: "Удалить завершённый запрос логов, освободив слот. Metrika ограничивает число одновременных запросов на счётчик — вызывай после скачивания всех частей.",
+			InputSchema: InputSchema{
+				Type: "object",
+				Properties: map[string]Property{
+					"counter_id": {Type: "string", Description: "ID счётчика"},
+					"request_id": {Type: "string", Description: "ID запроса логов для удаления"},
 				},
 				Required: []string{"counter_id", "request_id"},
 			},
